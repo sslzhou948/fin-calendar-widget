@@ -89,13 +89,15 @@ pub fn run() {
 
 // ---------------- 窗口与托盘 ----------------
 
-/// 主窗口定位：主显示器工作区右半屏（宽 42%），或按配置切左半屏；
-/// 随后开启点击穿透（TECH-DESIGN §5）。
+/// 主窗口定位：主显示器工作区按配置宽度（panel_width_pct，默认 42%）贴边，
+/// 或按配置切左/右半屏；随后开启点击穿透（TECH-DESIGN §5）。
 fn position_main_window(app: &AppHandle) {
     let Some(win) = app.get_webview_window("main") else {
         return;
     };
-    let side = app.state::<AppState>().config_snapshot().side;
+    let cfg = app.state::<AppState>().config_snapshot();
+    let side = cfg.side;
+    let pct = cfg.panel_width_pct.clamp(25, 75) as f64 / 100.0;
     // 主显示器工作区（排除任务栏）；取不到则回退 1920x1080
     let (wx, wy, ww, wh) = match app.primary_monitor().ok().flatten() {
         Some(m) => {
@@ -104,7 +106,7 @@ fn position_main_window(app: &AppHandle) {
         }
         None => (0, 0, 1920, 1080),
     };
-    let w = (ww as f64 * 0.42) as u32;
+    let w = (ww as f64 * pct) as u32;
     let h = wh;
     let x = if side == "left" {
         wx
