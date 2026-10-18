@@ -67,7 +67,7 @@ pub fn run() {
             // 开机自启（best-effort，失败只打日志不阻断启动）
             {
                 use tauri_plugin_autostart::ManagerExt;
-                if let Err(e) = app.autostart().enable() {
+                if let Err(e) = app.handle().autostart().enable() {
                     eprintln!("[app] 开机自启开启失败: {e}");
                 }
             }
