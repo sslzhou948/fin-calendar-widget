@@ -26,6 +26,7 @@
     notify_events: false,
     hide_holidays: false,
     panel_width_pct: 42,
+    frost_opacity: 70,
     colors: {
       time: '#f0a832', stars: '#ffd166',
       beat: '#4ade80', miss: '#f87171', inline: '#9ca3af',
@@ -88,6 +89,7 @@
       side: sideEl ? sideEl.value : 'right',
       font_size: parseInt(el('fontSize').value, 10),
       panel_width_pct: parseInt(el('panelWidth').value, 10),
+      frost_opacity: parseInt(el('frostOpacity').value, 10),
       frosted: el('frosted').checked,
       notifications: el('notify').checked,
       usd_mode: el('usdMode').checked,
@@ -112,6 +114,8 @@
     el('fontSizeVal').textContent = c.font_size + ' px';
     el('panelWidth').value = String(c.panel_width_pct);
     el('panelWidthVal').textContent = c.panel_width_pct + '%';
+    el('frostOpacity').value = String(c.frost_opacity);
+    el('frostOpacityVal').textContent = c.frost_opacity + '%';
     el('frosted').checked = !!c.frosted;
     el('notify').checked = !!c.notifications;
     el('usdMode').checked = !!c.usd_mode;
@@ -213,6 +217,10 @@
       el('panelWidthVal').textContent = el('panelWidth').value + '%';
     });
 
+    el('frostOpacity').addEventListener('input', function () {
+      el('frostOpacityVal').textContent = el('frostOpacity').value + '%';
+    });
+
     el('resetColorsBtn').addEventListener('click', function () {
       COLOR_FIELDS.forEach(function (pair) {
         el(pair[0]).value = DEFAULT_CONFIG.colors[pair[1]];
@@ -220,6 +228,23 @@
     });
 
     el('testBtn').addEventListener('click', runTest);
+
+    /* 样式类控件：防抖自动保存，主窗口经 calendar-updated 即时重渲染 */
+    var liveTimer = null;
+    function liveSave() {
+      if (liveTimer) clearTimeout(liveTimer);
+      liveTimer = setTimeout(async function () {
+        try { await saveConfig(readForm()); } catch (e) { /* 下次再试 */ }
+      }, 350);
+    }
+    ['fontSize', 'panelWidth', 'frostOpacity', 'frosted'].forEach(function (id) {
+      var node = el(id);
+      if (node) node.addEventListener('input', liveSave);
+    });
+    /* 颜色取色器同样实时生效 */
+    document.querySelectorAll('input[type="color"][data-color-key]').forEach(function (node) {
+      node.addEventListener('input', liveSave);
+    });
 
     el('saveBtn').addEventListener('click', async function () {
       var cfg = readForm();
