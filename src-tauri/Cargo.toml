@@ -1,0 +1,35 @@
+[package]
+name = "fin-calendar-widget"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+description = "桌面财经日历挂件 — 透明叠加层 + 事件驱动刷新 + 系统通知（Tauri v2 应用壳）"
+
+[lib]
+name = "fin_calendar_widget"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = "2"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-notification = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+# tokio：rt-multi-thread（后台任务）+ time（sleep/timeout）+ sync（mpsc）+ macros
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
+chrono = { version = "0.4", features = ["serde"] }
+# 必须与 caldata 保持同一版本（caldata 用 0.9）：DateTime<Tz> 类型跨 crate 必须一致
+chrono-tz = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# 数据层：纯 Rust crate（caldata），由另一位同事在 ../crates/caldata 实现。
+# 注：任务原文写的是 `path = "../../crates/caldata"`，经核对 caldata 实际位于
+# `~/workspace/fin-calendar/crates/caldata/`，从本文件（src-tauri/Cargo.toml）
+# 出发正确的相对路径是 `../crates/caldata`（`../../` 会指到 workspace 根下不存在的目录）。
+caldata = { path = "../crates/caldata" }
+
+[features]
+default = [ "custom-protocol" ]
+custom-protocol = [ "tauri/custom-protocol" ]

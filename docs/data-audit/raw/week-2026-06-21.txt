@@ -1,0 +1,37 @@
+# WEEK 2026-06-21 | RANGE 2026-06-21..2026-06-27
+# SOURCE https://www.forexfactory.com/calendar?week=jun21.2026
+# METHOD browser.open text extraction; structured transcription (not byte-raw HTML)
+# TOTAL 90 | VALUED 60 | NOVALUE 30
+# NOVALUE rows: date|time|ccy|title
+2026-06-22|6:00am|EUR|German Buba President Nagel Speaks
+2026-06-22|8:00am|EUR|ECB President Lagarde Speaks
+2026-06-22|--|USD|FOMC Member Waller Speaks
+2026-06-22|10:25am|EUR|ECB President Lagarde Speaks
+2026-06-22|4:30pm|USD|FOMC Member Goolsbee Speaks
+2026-06-23|3:55am|GBP|MPC Member Breeden Speaks
+2026-06-23|8:15am|GBP|MPC Member Taylor Speaks
+2026-06-23|8:25am|CAD|BOC Gov Macklem Speaks
+2026-06-23|12:30pm|GBP|MPC Member Dhingra Speaks
+2026-06-23|1:05pm|USD|President Trump Speaks
+2026-06-23|3:30pm|USD|API Weekly Statistical Bulletin
+2026-06-23|6:50pm|JPY|BOJ Summary of Opinions
+2026-06-24|1:30am|AUD|RBA Deputy Gov Hauser Speaks
+2026-06-24|2:00am|CHF|Gov Board Member Martin Speaks
+2026-06-24|4:00am|EUR|German Buba President Nagel Speaks
+2026-06-24|6:15am|CAD|Gov Council Member Rogers Speaks
+2026-06-24|--|GBP|MPC Member Breeden Speaks
+2026-06-24|8:00am|CHF|SNB Quarterly Bulletin
+2026-06-24|10:00am|GBP|MPC Member Dhingra Speaks
+2026-06-24|11:30am|GBP|MPC Member Pill Speaks
+2026-06-24|12:30pm|CAD|BOC Summary of Deliberations
+2026-06-24|3:00pm|USD|Bank Stress Test Results
+2026-06-24|7:30pm|USD|President Trump Speaks
+2026-06-25|3:00am|EUR|ECB Economic Bulletin
+2026-06-25|7:45am|USD|FOMC Member Bowman Speaks
+2026-06-25|2:40pm|USD|FOMC Member Williams Speaks
+2026-06-25|5:30pm|USD|FOMC Member Goolsbee Speaks
+2026-06-26|3:30am|EUR|German Buba President Nagel Speaks
+2026-06-26|10:30am|USD|FOMC Member Kashkari Speaks
+2026-06-26|12:30pm|USD|President Trump Speaks
+# NOTES:
+# - "Bank Stress Test Results": an event with a "result" but no numeric fields.

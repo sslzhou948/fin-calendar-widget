@@ -1,0 +1,23 @@
+# WEEK 2026-10-18 | RANGE 2026-10-18..2026-10-24
+# SOURCE https://www.forexfactory.com/calendar?week=oct18.2026
+# METHOD browser.open text extraction; structured transcription (not byte-raw HTML)
+# TOTAL 86 | VALUED 72 | NOVALUE 14
+# NOVALUE rows: date|time|ccy|title
+2026-10-18|Day 7|All|IMF Meetings
+2026-10-18|6:05pm|AUD|RBA Assist Gov Kent Speaks
+2026-10-18|--|CNY|NBS Press Conference
+2026-10-19|10:30am|CAD|BOC Business Outlook Survey
+2026-10-20|12:00pm|GBP|MPC Member Greene Speaks
+2026-10-20|3:30pm|USD|API Weekly Statistical Bulletin
+2026-10-20|5:30pm|AUD|RBA Deputy Gov Hauser Speaks
+2026-10-21|2:15am|EUR|German Buba President Nagel Speaks
+2026-10-21|5:00am|EUR|German Buba Monthly Report
+2026-10-21|8:00am|GBP|BOE Gov Bailey Speaks
+2026-10-22|2:30am|CHF|Summary of Monetary Policy Discussions
+2026-10-24|8:00pm|CHF|Daylight Saving Time Shift
+2026-10-24|--|EUR|Daylight Saving Time Shift
+2026-10-24|--|GBP|Daylight Saving Time Shift
+# CCY_ALL (full week): All=1 NZD=5 GBP=20 AUD=4 CNY=10 JPY=4 CAD=11 USD=14 EUR=15 CHF=2
+# NOTES:
+# - "10-y Bond Auction" previous value format "5.38|3.3" (yield|bid-to-cover).
+# - No rate decisions this week; CNY LPR rows are valued (3.00%/3.50%) and data-like.

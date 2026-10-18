@@ -1,0 +1,16 @@
+# Rust build artifacts
+target/
+# Node
+node_modules/
+# Tauri build artifacts
+src-tauri/target/
+src-tauri/WixTools/
+# Screenshots temp
+docs/screenshots/_tmp_*.html
+# OS
+.DS_Store
+Thumbs.db
+# Editor
+.vscode/
+.idea/
+*.swp

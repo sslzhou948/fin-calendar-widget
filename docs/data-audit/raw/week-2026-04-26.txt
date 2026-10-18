@@ -1,0 +1,41 @@
+# WEEK 2026-04-26 | RANGE 2026-04-26..2026-05-02 (FOMC week)
+# SOURCE https://www.forexfactory.com/calendar?week=apr26.2026
+# METHOD browser.open text extraction; structured transcription (not byte-raw HTML)
+# TOTAL 120 | VALUED 93 | NOVALUE 27
+# NOVALUE rows: date|time|ccy|title
+2026-04-26|All Day|NZD|Bank Holiday
+2026-04-26|All Day|AUD|Bank Holiday
+2026-04-26|6:00pm|USD|President Trump Speaks
+2026-04-27|10:04pm|JPY|BOJ Outlook Report
+2026-04-27|--|JPY|Monetary Policy Statement
+2026-04-28|1:30am|JPY|BOJ Press Conference
+2026-04-28|3:30pm|USD|API Weekly Statistical Bulletin
+2026-04-28|All Day|JPY|Bank Holiday
+2026-04-28|7:30pm|NZD|RBNZ Gov Breman Speaks
+2026-04-29|8:45am|CAD|BOC Monetary Policy Report
+2026-04-29|--|CAD|BOC Rate Statement
+2026-04-29|9:30am|CAD|BOC Press Conference
+2026-04-29|--|USD|FOMC Statement
+2026-04-29|1:30pm|USD|FOMC Press Conference
+2026-04-30|6:00am|GBP|BOE Monetary Policy Report
+2026-04-30|6:00am|GBP|Monetary Policy Summary
+2026-04-30|--|GBP|BOE Inflation Letter
+2026-04-30|6:30am|GBP|BOE Gov Bailey Speaks
+2026-04-30|--|EUR|Monetary Policy Statement
+2026-04-30|7:45am|EUR|ECB Press Conference
+2026-04-30|All Day|CNY|Bank Holiday
+2026-04-30|All Day|CHF|Bank Holiday
+2026-05-01|All Day|EUR|French Bank Holiday
+2026-05-01|All Day|EUR|German Bank Holiday
+2026-05-01|All Day|EUR|Italian Bank Holiday
+2026-05-01|6:15am|GBP|MPC Member Pill Speaks
+2026-05-01|2:00pm|USD|President Trump Speaks
+# CCY_ALL (full week): USD=36 EUR=30 GBP=14 JPY=12 AUD=9 CNY=5 CAD=6 NZD=4 CHF=4
+# NOTES:
+# - Rate decisions WITH values: "JPY BOJ Policy Rate <0.75% <0.75% <0.75%",
+#   "CAD Overnight Rate 2.25% 2.25% 2.25%", "USD Federal Funds Rate 3.75% 3.75% 3.75%",
+#   "GBP Official Bank Rate 3.75% 3.75% 3.75%", "EUR Main Refinancing Rate 2.15% 2.15% 2.15%".
+# - "GBP MPC Official Bank Rate Votes 1-0-8 1-0-8 0-0-9" has vote-count values.
+# - Edge: time shown as "Feb Data" for delayed releases (Building Permits, Housing Starts, CB Leading Index).
+# - Edge: "All Day EUR German Prelim CPI m/m" HAS values (0.6% 0.7% 1.1%);
+#   "All Day USD Omdia Total Vehicle Sales" HAS values (15.9M 16.0M 16.3M).

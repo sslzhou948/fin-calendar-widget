@@ -1,0 +1,19 @@
+[package]
+name = "caldata"
+version = "0.1.0"
+edition = "2021"
+description = "桌面财经日历挂件 — 纯 Rust 数据层（禁止依赖 Tauri，可独立 cargo test）"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.9"
+# rustls-tls 而非 default-tls：避免依赖系统 openssl，便于跨平台构建
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+scraper = "0.20"
+tokio = { version = "1", features = ["rt", "macros", "time"] }
+async-trait = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros", "time"] }

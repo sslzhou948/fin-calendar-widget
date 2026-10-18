@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>财经日历 — 设置</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="settings">
+<div class="s-wrap">
+  <h1>财经日历 · 设置</h1>
+  <p class="desc">修改后点「保存」即时生效（Tauri 内写入后端配置，浏览器预览模式写入 localStorage）。</p>
+
+  <div class="s-card">
+    <h2>国家 / 地区</h2>
+    <div class="s-row" id="countries"></div>
+  </div>
+
+  <div class="s-card">
+    <h2>显示与位置</h2>
+    <div class="s-row">
+      <span class="name">星级阈值</span>
+      <select id="minStars">
+        <option value="1">1 星及以上（全看）</option>
+        <option value="2">2 星及以上</option>
+        <option value="3" selected>3 星及以上（默认）</option>
+        <option value="4">4 星及以上</option>
+        <option value="5">只看 5 星</option>
+      </select>
+    </div>
+    <div class="s-row">
+      <span class="name">半屏位置</span>
+      <label class="item"><input type="radio" name="side" value="right" checked> 右半屏（默认）</label>
+      <label class="item"><input type="radio" name="side" value="left"> 左半屏</label>
+    </div>
+    <div class="s-row">
+      <span class="name">字号</span>
+      <input type="range" id="fontSize" min="12" max="18" step="1" value="14">
+      <span class="range-val" id="fontSizeVal">14 px</span>
+    </div>
+    <div class="s-row">
+      <label class="item"><input type="checkbox" id="frosted" checked> 毛玻璃面板（默认开）</label>
+    </div>
+    <div class="s-row">
+      <label class="item"><input type="checkbox" id="notify" checked> 数据公布系统通知（默认开）</label>
+    </div>
+    <div class="s-row">
+      <label class="item"><input type="checkbox" id="usdMode"> 美元口径利多利空着色（默认关）</label>
+    </div>
+    <div class="s-row">
+      <label class="item"><input type="checkbox" id="notifyEvents"> 事件类通知（默认关）</label>
+    </div>
+    <div class="s-row">
+      <label class="item"><input type="checkbox" id="hideHolidays"> 隐藏假期行（默认关）</label>
+    </div>
+    <div class="s-row">
+      <span class="name">数据源</span>
+      <select id="source">
+        <option value="auto" selected>自动（主 → 备降级）</option>
+        <option value="primary">主数据源（Investing 小工具）</option>
+        <option value="backup">备用数据源（JSON 接口）</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="s-card">
+    <h2>接口测试 / 诊断</h2>
+    <div class="s-row">
+      <button class="btn" id="testBtn">接口测试</button>
+      <span class="note" style="color:var(--muted);font-size:12px">测试主/备数据源的连通性、延迟与解析情况</span>
+    </div>
+    <div id="testResult"></div>
+  </div>
+
+  <div class="s-btns">
+    <button class="btn primary" id="saveBtn">保存</button>
+    <span id="saveTip" hidden>已保存 ✓</span>
+  </div>
+</div>
+<script src="settings.js"></script>
+</body>
+</html>

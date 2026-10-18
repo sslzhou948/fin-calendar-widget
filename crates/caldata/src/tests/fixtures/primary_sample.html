@@ -1,0 +1,94 @@
+<!--
+  仿真样本，结构忠于真实页面；非真实接口返回，未经 live 验证。
+
+  模拟 GET https://sslecal2.investing.com
+  （columns=exc_flags,exc_currency,exc_importance,exc_actual,exc_forecast,exc_previous
+   &calType=week&timeZone=28&lang=6&countries=<ids>）返回的 HTML 表格。
+
+  约定（依据社区文档与 POC 观察）：
+  - 日期分组行：单 <td colspan>，文本如 "2026年10月19日星期一"
+  - 事件行列顺序：时间 / 货币 / 活动 / 重要性 / 今值 / 预测值 / 前值
+  - 时间列："HH:MM"（GMT+8）或 "全天"
+  - 重要性：<i> 牛头图标，class 含 FullBullish = 实心（计入档位），EmptyBullish = 空心
+-->
+<table id="economicCalendarData">
+  <thead>
+    <tr><th>时间</th><th>货币</th><th>事件</th><th>重要性</th><th>今值</th><th>预测值</th><th>前值</th></tr>
+  </thead>
+  <tbody>
+    <tr><td colspan="7" class="theDay">2026年10月19日星期一</td></tr>
+    <tr class="js-event-item" id="eventRowId_101">
+      <td class="time">10:00</td>
+      <td class="flagCur"><span title="China" class="ceFlags">CNY</span></td>
+      <td class="event">中国季度GDP年率</td>
+      <td class="sentiment"><i class="grayFullBullishIcon"></i><i class="grayFullBullishIcon"></i><i class="grayEmptyBullishIcon"></i></td>
+      <td class="act">5.2%</td>
+      <td class="fore">5.1%</td>
+      <td class="prev">5.2%</td>
+    </tr>
+    <tr class="js-event-item" id="eventRowId_102">
+      <td class="time">07:01</td>
+      <td class="flagCur"><span title="United Kingdom" class="ceFlags">GBP</span></td>
+      <td class="event">英国Rightmove平均房屋要价指数月率</td>
+      <td class="sentiment"><i class="grayFullBullishIcon"></i><i class="grayEmptyBullishIcon"></i><i class="grayEmptyBullishIcon"></i></td>
+      <td class="act">-1.0%</td>
+      <td class="fore"></td>
+      <td class="prev">0.5%</td>
+    </tr>
+    <tr class="js-event-item" id="eventRowId_103">
+      <td class="time">全天</td>
+      <td class="flagCur"><span title="Euro Zone" class="ceFlags">EUR</span></td>
+      <td class="event">欧元区财长会议</td>
+      <td class="sentiment"><i class="grayFullBullishIcon"></i><i class="grayEmptyBullishIcon"></i><i class="grayEmptyBullishIcon"></i></td>
+      <td class="act"></td>
+      <td class="fore"></td>
+      <td class="prev"></td>
+    </tr>
+    <tr><td colspan="7" class="theDay">2026年10月20日星期二</td></tr>
+    <tr class="js-event-item" id="eventRowId_201">
+      <td class="time">05:45</td>
+      <td class="flagCur"><span title="New Zealand" class="ceFlags">NZD</span></td>
+      <td class="event">新西兰贸易帐</td>
+      <td class="sentiment"><i class="grayFullBullishIcon"></i><i class="grayFullBullishIcon"></i><i class="grayFullBullishIcon"></i></td>
+      <td class="act">-775M</td>
+      <td class="fore">-1,349M</td>
+      <td class="prev">-1,420M</td>
+    </tr>
+    <tr class="js-event-item" id="eventRowId_202">
+      <td class="time">20:30</td>
+      <td class="flagCur"><span title="United States" class="ceFlags">USD</span></td>
+      <td class="event">美国初请失业金人数</td>
+      <td class="sentiment"><i class="grayFullBullishIcon"></i><i class="grayFullBullishIcon"></i><i class="grayEmptyBullishIcon"></i></td>
+      <td class="act">210K</td>
+      <td class="fore">215K</td>
+      <td class="prev">212K</td>
+    </tr>
+    <tr class="js-event-item" id="eventRowId_203">
+      <td class="time">11:00</td>
+      <td class="flagCur"><span title="Japan" class="ceFlags">JPY</span></td>
+      <td class="event">日本央行利率决议</td>
+      <td class="sentiment"><i class="grayFullBullishIcon"></i><i class="grayFullBullishIcon"></i><i class="grayFullBullishIcon"></i></td>
+      <td class="act"></td>
+      <td class="fore"></td>
+      <td class="prev">-0.1%</td>
+    </tr>
+    <tr class="js-event-item" id="eventRowId_204">
+      <td class="time">16:00</td>
+      <td class="flagCur"><span title="South Africa" class="ceFlags">ZAR</span></td>
+      <td class="event">南非CPI年率</td>
+      <td class="sentiment"><i class="grayFullBullishIcon"></i><i class="grayFullBullishIcon"></i><i class="grayEmptyBullishIcon"></i></td>
+      <td class="act">5.5%</td>
+      <td class="fore">5.4%</td>
+      <td class="prev">5.3%</td>
+    </tr>
+    <tr class="js-event-item" id="eventRowId_205">
+      <td class="time">20:30</td>
+      <td class="flagCur"><span title="United States" class="ceFlags">USD</span></td>
+      <td class="event">美国CPI年率</td>
+      <td class="sentiment"><i class="grayFullBullishIcon"></i><i class="grayFullBullishIcon"></i><i class="grayFullBullishIcon"></i></td>
+      <td class="act">2.9%</td>
+      <td class="fore">2.8%</td>
+      <td class="prev">2.9%</td>
+    </tr>
+  </tbody>
+</table>

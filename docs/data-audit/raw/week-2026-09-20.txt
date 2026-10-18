@@ -1,0 +1,45 @@
+# WEEK 2026-09-20 | RANGE 2026-09-20..2026-09-26
+# SOURCE https://www.forexfactory.com/calendar?week=sep20.2026
+# METHOD browser.open text extraction; structured transcription (not byte-raw HTML)
+# TOTAL 82 | VALUED 45 | NOVALUE 37
+# NOVALUE rows: date|time|ccy|title
+2026-09-20|All Day|JPY|Bank Holiday
+2026-09-21|5:00am|EUR|German Buba Monthly Report
+2026-09-21|5:30am|USD|FOMC Member Goolsbee Speaks
+2026-09-21|10:00am|EUR|ECB President Lagarde Speaks
+2026-09-21|10:05am|CAD|BOC Gov Macklem Speaks
+2026-09-21|2:00pm|AUD|RBA Assist Gov Hunter Speaks
+2026-09-21|All Day|JPY|Bank Holiday
+2026-09-21|10:10pm|AUD|RBA Gov Bullock Speaks
+2026-09-22|3:30am|EUR|German Buba President Nagel Speaks
+2026-09-22|6:00am|EUR|ECB President Lagarde Speaks
+2026-09-22|8:55am|USD|President Trump Speaks
+2026-09-22|9:05am|USD|FOMC Member Williams Speaks
+2026-09-22|9:20am|USD|FOMC Member Jefferson Speaks
+2026-09-22|12:00pm|USD|FOMC Member Barkin Speaks
+2026-09-22|2:30pm|EUR|German Buba President Nagel Speaks
+2026-09-22|3:30pm|USD|API Weekly Statistical Bulletin
+2026-09-22|All Day|JPY|Bank Holiday
+2026-09-23|9:05am|USD|FOMC Member Barr Speaks
+2026-09-23|11:00am|USD|FOMC Member Goolsbee Speaks
+2026-09-24|2:30am|CHF|SNB Monetary Policy Assessment
+2026-09-24|3:00am|CHF|SNB Press Conference
+2026-09-24|--|EUR|ECB Economic Bulletin
+2026-09-24|3:10am|USD|FOMC Member Williams Speaks
+2026-09-24|4:30am|GBP|MPC Member Dhingra Speaks
+2026-09-24|--|USD|FOMC Member Barkin Speaks
+2026-09-24|7:50am|USD|FOMC Member Hammack Speaks
+2026-09-24|8:30am|GBP|MPC Member Breeden Speaks
+2026-09-24|9:00am|GBP|MPC Member Lombardelli Speaks
+2026-09-24|9:10am|USD|FOMC Member Paulson Speaks
+2026-09-24|9:15am|USD|President Trump Speaks
+2026-09-24|All Day|CNY|Bank Holiday
+2026-09-24|6:55pm|USD|President Trump Speaks
+2026-09-25|4:15am|GBP|BOE Gov Bailey Speaks
+2026-09-25|--|USD|FOMC Member Williams Speaks
+2026-09-25|8:20am|USD|FOMC Member Schmid Speaks
+2026-09-25|1:00pm|USD|FOMC Member Hammack Speaks
+2026-09-26|9:00am|NZD|Daylight Saving Time Shift
+# NOTES:
+# - Rate decision WITH values this week: "CHF SNB Policy Rate 0.00% 0.00% 0.00%"
+#   (assessment + press conference around it have no values).

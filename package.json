@@ -1,0 +1,1 @@
+{"description":"桌面财经日历挂件 Desktop financial calendar widget (Tauri)","devDependencies":{"@tauri-apps/cli":"^2.0.0","puppeteer-core":"^23.0.0"},"name":"fin-calendar-widget","private":true,"scripts":{"tauri":"tauri"},"type":"module","version":"0.1.0"}

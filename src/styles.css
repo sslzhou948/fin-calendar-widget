@@ -1,0 +1,294 @@
+/* 桌面财经日历挂件 — 共用样式（挂件 index.html + 设置页 settings.html）
+ * 深色主题，中文友好字体栈，无任何外部引用，file:// 可直接打开。 */
+
+:root {
+  --fs: 14px;                              /* 挂件字号，可被 JS 逐级缩小 */
+  --bg-panel: rgba(10, 12, 20, .55);
+  --bg-panel-solid: rgba(10, 12, 20, .88);
+  --border: rgba(255, 255, 255, .12);
+  --text: #e8eaf0;
+  --muted: #9aa0b4;
+  --gold: #ffd166;
+  --bull: #ff6b6b;                         /* 利多红 */
+  --bear: #51cf66;                         /* 利空绿 */
+  --near-border: rgba(255, 209, 102, .6);
+  --row-border: rgba(255, 255, 255, .06);
+  --badge-bg: rgba(255, 255, 255, .1);
+  --accent: #4dabf7;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: transparent;                 /* 挂件：窗口透明，壁纸透出 */
+}
+
+body {
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+               system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text);
+  font-size: var(--fs);
+  height: 100vh;
+  display: flex;
+  justify-content: flex-end;               /* 默认右半屏 */
+  align-items: flex-start;
+  padding: 12px;
+  -webkit-font-smoothing: antialiased;
+}
+
+body.side-left { justify-content: flex-start; }
+
+/* ---------------- 挂件面板 ---------------- */
+#panel {
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100vh - 24px);
+  overflow: hidden;
+  background: var(--bg-panel);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.9em 1em 0.7em;
+  line-height: 1.45;
+}
+
+/* 毛玻璃关闭：只留深色底 */
+body.no-frosted #panel {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--bg-panel-solid);
+}
+
+.p-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 0.55em;
+  margin-bottom: 0.4em;
+  border-bottom: 1px solid var(--border);
+}
+.p-title { font-size: 1.07em; font-weight: 700; letter-spacing: .08em; }
+.p-sub { font-size: .78em; color: var(--muted); }
+
+/* 按天分组 */
+.day-group { margin-bottom: 0.7em; }
+.day-head {
+  font-size: .92em;
+  font-weight: 700;
+  color: var(--gold);
+  padding: 0.45em 0.2em 0.35em;
+  letter-spacing: .04em;
+}
+
+/* 事件行 */
+.ev {
+  display: flex;
+  align-items: center;
+  gap: 0.55em;
+  padding: 0.5em 0.45em;
+  border: 1px solid transparent;
+  border-bottom: 1px solid var(--row-border);
+  border-radius: 8px;
+}
+.ev:last-child { border-bottom-color: transparent; }
+
+.ev .time {
+  flex: 0 0 3.2em;
+  font-size: .92em;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.ev .ccy {
+  flex: 0 0 auto;
+  font-size: .72em;
+  font-weight: 700;
+  padding: 0.12em 0.5em;
+  border-radius: 999px;
+  background: var(--badge-bg);
+  color: var(--muted);
+  letter-spacing: .05em;
+  white-space: nowrap;
+}
+.ev .title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: .95em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ev .stars {
+  flex: 0 0 auto;
+  color: var(--gold);
+  font-size: .85em;
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+.ev .stars .off { color: rgba(255, 255, 255, .18); }
+
+/* 预期 / 前值 / 实际 三栏 */
+.ev .vals { flex: 0 0 auto; display: flex; gap: 0.55em; }
+.ev .val { display: flex; flex-direction: column; align-items: flex-end; min-width: 4.2em; }
+.ev .val .k { font-size: .68em; color: var(--muted); line-height: 1.2; }
+.ev .val .v {
+  font-size: .92em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+.ev .val .v.na { color: var(--muted); font-weight: 400; }
+
+/* 利多 / 利空着色：只染实际值 */
+.ev.bull .val.actual .v { color: var(--bull); }
+.ev.bear .val.actual .v { color: var(--bear); }
+
+/* 距公布 <6 小时高亮边框 */
+.ev.near {
+  border: 1px solid var(--near-border);
+  box-shadow: 0 0 0.5em rgba(255, 209, 102, .15);
+  background: rgba(255, 209, 102, .05);
+}
+
+#empty {
+  padding: 2em 1em;
+  text-align: center;
+  color: var(--muted);
+  font-size: .9em;
+}
+
+#p-err {
+  font-size: .8em;
+  color: var(--bull);
+  padding: 0.5em 0.2em;
+}
+
+/* ---------------- 设置页（不透明普通页面） ---------------- */
+body.settings {
+  background: #0d0f16;
+  display: block;
+  height: auto;
+  min-height: 100vh;
+  padding: 28px 20px 60px;
+}
+.s-wrap { max-width: 640px; margin: 0 auto; }
+.s-wrap h1 { font-size: 20px; margin: 0 0 6px; letter-spacing: .06em; }
+.s-wrap .desc { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+
+.s-card {
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.s-card h2 { font-size: 15px; margin: 0 0 12px; }
+.s-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.s-row:last-child { margin-bottom: 0; }
+.s-row label.item { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; }
+.s-row .name { flex: 0 0 120px; font-size: 14px; color: var(--muted); }
+
+select, input[type="number"] {
+  background: rgba(255, 255, 255, .08);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 14px;
+  font-family: inherit;
+}
+select option { background: #14161f; }
+
+input[type="range"] { width: 220px; accent-color: var(--accent); }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width: 16px; height: 16px; }
+.range-val { font-size: 14px; min-width: 4em; color: var(--gold); }
+
+.s-btns { display: flex; gap: 12px; margin-top: 4px; }
+button.btn {
+  font-family: inherit;
+  font-size: 14px;
+  padding: 9px 22px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  color: var(--text);
+  background: rgba(255, 255, 255, .08);
+}
+button.btn:hover { background: rgba(255, 255, 255, .14); }
+button.btn.primary { background: #1971c2; border-color: #1971c2; color: #fff; }
+button.btn.primary:hover { background: #1864ab; }
+
+#testResult { margin-top: 12px; font-size: 13px; }
+#testResult .t-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, .03);
+}
+#testResult .ok { color: var(--bear); }
+#testResult .fail { color: var(--bull); }
+#testResult .note { color: var(--muted); font-size: 12px; margin-top: 8px; }
+#saveTip { font-size: 13px; color: var(--bear); margin-left: 8px; }
+
+/* ---------------- 国旗 / 国家缩写（行格式补丁） ---------------- */
+.ev .flag {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+  vertical-align: -4px;
+  flex: 0 0 auto;
+}
+.ev .flag-fb {                       /* 国旗加载失败时的色块圆 fallback */
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .22);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.ev .ccode {
+  flex: 0 0 auto;
+  font-size: .72em;
+  font-weight: 700;
+  letter-spacing: .05em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* kind=event：紧凑单行，不着色 */
+.ev-event { padding: 0.34em 0.45em; }
+.ev .status {
+  flex: 0 0 auto;
+  font-size: .72em;
+  font-weight: 700;
+  padding: 0.12em 0.6em;
+  border-radius: 999px;
+  background: var(--badge-bg);
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+/* kind=holiday：淡化单行，小一号 */
+.ev-holiday { opacity: .55; font-size: .85em; padding: 0.3em 0.45em; }
+.ev-holiday .flag, .ev-holiday .flag-fb { width: 14px; height: 14px; font-size: 8px; }
+.ev-holiday .title { color: var(--muted); }
+
+/* 实际值着色：中性口径（deviation）— 绿=超预期 / 红=低预期 / 灰=符合预期 */
+.dev-beat { color: #4ade80; }
+.dev-miss { color: #f87171; }
+.dev-inline { color: #9ca3af; }
+
+/* 美元口径着色（usd_mode）：利多红 / 利空绿，沿用 .bull / .bear 类 */
+.ev .val.actual .v.bull { color: var(--bull); }
+.ev .val.actual .v.bear { color: var(--bear); }
+/* 旧的行级 .bull / .bear 规则保留在上方，供历史兼容 */

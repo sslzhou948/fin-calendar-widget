@@ -1,0 +1,17 @@
+# WEEK 2026-08-16 | RANGE 2026-08-16..2026-08-22
+# SOURCE https://www.forexfactory.com/calendar?week=aug16.2026
+# METHOD browser.open text extraction; structured transcription (not byte-raw HTML)
+# TOTAL 100 | VALUED 90 | NOVALUE 10
+# NOVALUE rows: date|time|ccy|title
+2026-08-17|--|CNY|NBS Press Conference
+2026-08-18|3:30pm|USD|API Weekly Statistical Bulletin
+2026-08-18|9:45pm|AUD|RBA Deputy Gov Hauser Speaks
+2026-08-19|2:10am|EUR|ECB President Lagarde Speaks
+2026-08-19|5:15am|EUR|ECB President Lagarde Speaks
+2026-08-19|1:00pm|USD|FOMC Meeting Minutes
+2026-08-19|1:30pm|USD|President Trump Speaks
+2026-08-20|5:00am|EUR|German Buba Monthly Report
+2026-08-20|10:10am|USD|FOMC Member Musalem Speaks
+2026-08-21|6:00pm|USD|President Trump Speaks
+# NOTES:
+# - Quiet week (no holidays, no rate decisions): novalue share only 10%.
