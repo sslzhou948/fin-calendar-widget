@@ -29,8 +29,8 @@ pub async fn notify_new_actuals(app: &AppHandle, fresh: &[CalendarEvent]) {
     }
 
     // 权限：Windows 通常默认允许；macOS 首次需要用户授权（只问一次）
-    match app.notification().is_permission_granted() {
-        Ok(true) => {}
+    match app.notification().permission_state() {
+        Ok(tauri_plugin_notification::PermissionState::Granted) => {}
         _ => {
             if !PERMISSION_ASKED.swap(true, Ordering::SeqCst) {
                 let _ = app.notification().request_permission();
@@ -83,8 +83,8 @@ pub async fn notify_due_events(app: &AppHandle) {
         return;
     }
 
-    match app.notification().is_permission_granted() {
-        Ok(true) => {}
+    match app.notification().permission_state() {
+        Ok(tauri_plugin_notification::PermissionState::Granted) => {}
         _ => {
             if !PERMISSION_ASKED.swap(true, Ordering::SeqCst) {
                 let _ = app.notification().request_permission();
