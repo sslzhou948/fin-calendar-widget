@@ -1,1 +1,83 @@
-IyDwn5OFIOahjOmdoui0oue7j+aXpeWOhuaMguS7tgoKKirmiormnKrmnaXkuIDlkajnmoTotKLnu4/lpKfkuovvvIznm7TmjqUi6LS0IuWcqOS9oOeahOahjOmdouWjgee6uOS4iuOAgioqCgo+IOWmguaenOi/meS4qumhueebruWvueS9oOacieW4ruWKqe+8jOasoui/jueCueWPs+S4iuinkueahCDirZAgKipTdGFyKiog5pSv5oyB5LiA5LiL77yB5L2g55qEIFN0YXIg5piv5oiR5oyB57ut5pu05paw55qE5pyA5aSn5Yqo5Yqb44CCCgotLS0KCiMjIOS4uuS7gOS5iOS9oOmcgOimgeWug++8nwoK5YGa576O6IKh44CB5pyf6LSn44CB5aSW5rGH5Lqk5piT77yM5pyA5oCV55qE5bCx5pivKirplJnov4flhbPplK7mlbDmja4qKu+8mumdnuWGnOOAgUNQSeOAgeiuruaBr+WGs+iuruKApuKApui/meS6m+aVsOWtl+S4gOWFrOW4g++8jOihjOaDheWPr+iDveeerOmXtOazouWKqOWHoOS4queZvuWIhueCueOAggoK5L2G546w5a6e5piv77ya6LSi57uP572R56uZ6KaB5Li75Yqo5omT5byA5omN55yL5b6X5Yiw77yM5omL5py6IEFwcCDnmoTmjqjpgIHopoHkuYjlu7bov5/opoHkuYjooqvmt7nmsqHlnKjmtojmga/loIbph4zvvIznrYnkvaDmg7PotbfmnaXmn6XvvIzml6XlhoXmnIDph43opoHnmoTooYzmg4Xlt7Lnu4/otbDlrozkuobjgIIKCui/meS4quaMguS7tuWwseaYr+S4uuino+WGs+i/meS4queXm+eCueiAjOeUn+eahO+8mioq5a6D5YOP5LiA5bGC6YCP5piO6JaE6Iac5LiA5qC35rWu5Zyo5L2g55qE5aOB57q45LiK77yM5Y+z5Y2K5bGP6Z2Z6Z2Z5bGV56S65pyq5p2l5LiA5ZGo5omA5pyJ6YeN6KaB6LSi57uP5LqL5Lu2KirigJTigJTkuI3nlKjmiZPlvIDku7vkvZXova/ku7bvvIzkvZnlhYnkuIDmiavlsLHnn6XpgZPku4rmmZrmnInku4DkuYjlpKfkuovjgIIKCiMjIOWug+iDveW4ruS9oOWBmuS7gOS5iO+8nwoKLSDwn5GAICoq5LiA55y85o6M5o+h5pys5ZGo5aSn5LqLKirvvJrpnZ7lhpzjgIFDUEnjgIHlpK7ooYzlhrPorq7igKbigKbmjInlpKnliIbnu4TvvIzph43opoHnqIvluqbnlKjmmJ/nuqfmoIflpb3vvIwzIOaYn+S7peS4i+iHquWKqOi/h+a7pOS4jeaJk+aJsOS9oAotIOKPsCAqKuWGjeS5n+S4jeeUqOeul+aXtuW3rioq77ya5omA5pyJ5pe26Ze06Ieq5Yqo5o2i566X5oiQ5YyX5Lqs5pe26Ze077yM576O5Lic5aSP5Yas5Luk5pe25YiH5o2i5LiN55So5L2g5pON5b+DCi0g8J+TiiAqKuaVsOaNruS4gOWFrOW4g+Wwseeci+WIsOe7k+aenCoq77ya6aKE5pyf5YC8IC8g5YmN5YC8IC8g5a6e6ZmF5YC85LiJ5qCP5a+554Wn77yM6LaF6aKE5pyf5qCH57u/44CB5L2O6aKE5pyf5qCH57qi77yM5LiA55uu5LqG54S2Ci0g8J+UlCAqKumHjeimgeaVsOaNruWFrOW4g+aXtuW8ueeql+aPkOmGkioq77ya55uv55uY5pe25LiN55So5YiG5b+D5Y675Yi35omL5py6Ci0g8J+qnyAqKuWujOWFqOS4jeaJk+aJsOS9oOW5sua0uyoq77ya6YCP5piO5Y+g5Yqg5Zyo5aOB57q45LiK5LiN5pu/5o2i5aOB57q477yM6byg5qCH55u05o6l54K556m/77yI54K55LiN5Lit44CB5oyh5LiN5L2P77yJ77yM5qGM6Z2i5Zu+5qCH6K+l5Zyo5ZOq6L+Y5Zyo5ZOqCi0g8J+OqCAqKumVv+W+l+Wlveeci+i/mOiDveiwgyoq77ya5q+b546755KD6Z2i5p2/44CBNyDlpITpopzoibLoh6rlrprkuYnjgIHpnaLmnb/lrr3luqbjgIHlt6blj7PljYrlsY/jgIHlrZflj7fvvIzpmo/kvaDosIMKLSDwn6q2ICoq6L275Yiw5b+Y6K6w5a6D5Zyo6L+Q6KGMKirvvJrkuovku7bpqbHliqjliLfmlrDvvIjlj6rlnKjmlbDmja7lhazluIPliY3lkI7llKTphpLvvInvvIzkuI3ova7or6LjgIHkuI3ljaDotYTmupDvvIzlvIDmnLroh6rlkK/jgIHmiZjnm5jluLjpqbsKLSDwn4yNICoq5aSa5biC5Zy66KaG55uWKirvvJrpu5jorqTkuK3nvo7vvIzlj6/liqDpgInmrKflhYPljLrjgIHoi7Hlm73jgIHml6XmnKznrYnvvJvmlbDmja7mupDmlYXpmpzoh6rliqjpmY3nuqfvvIzmlq3nvZHkuZ/mnInmnKzlnLDnvJPlrZjlhZzlupUKCiMjIOmAguWQiOiwge+8nwoKLSDlgZrnvo7ogqEgLyDmnJ/otKcgLyDlpJbmsYcgLyDpu4Tph5Hljp/msrnnmoTkuqTmmJPogIUKLSDpnIDopoHot5/ouKrlro/op4LmlbDmja7jgIHlpK7ooYzliqjmgIHnmoTmipXotYTogIUKLSDorqjljozlvIDkuIDloIbnvZHpobXmn6Xml6XljobvvIzmg7PopoHmoYzpnaLkuIDnnLzlj6/op4HnmoTkuroKCiMjIOaViOaenOWbvgoKIVvmjILku7bkuLvpnaLmnb/vvIjlj7PljYrlsY/Ct+avm+eOu+eSg++8iV0oZG9jcy9zY3JlZW5zaG90cy93aWRnZXQtcmlnaHQtZnJvc3RlZC5wbmcpCgohW+iuvue9rumhtV0oZG9jcy9zY3JlZW5zaG90cy93aWRnZXQtc2V0dGluZ3MtZnVsbC5wbmcpCgojIyDkuIvovb3lronoo4UKCiMjIyBXaW5kb3dzCgoxLiDmiZPlvIDmnKzku5PlupPnmoQgWyoqUmVsZWFzZXMqKl0oaHR0cHM6Ly9naXRodWIuY29tL3NzbHpob3U5NDgvZmluLWNhbGVuZGFyLXdpZGdldC9yZWxlYXNlcykg6aG16Z2iCjIuIOS4i+i9veacgOaWsOeJiOeahCBgRmluQ2FsZW5kYXJXaWRnZXRfKi5leGVg77yI5a6J6KOF5ZCR5a+877yM5o6o6I2Q77yJ5oiWIGAqLm1zaWAKMy4g5Y+M5Ye76L+Q6KGM5a6J6KOF77yI6aaW5qyh6L+Q6KGMIFdpbmRvd3Mg5Y+v6IO95Lya5by5IFNtYXJ0U2NyZWVuIOitpuWRiu+8jOeCuSLmm7TlpJrkv6Hmga8iIOKGkiAi5LuN6KaB6L+Q6KGMIuWNs+WPr++8jOi9r+S7tuaXoOetvuWQjeWxnuato+W4uOaDheWGte+8iQo0LiDlronoo4XlrozmiJDlkI7mjILku7boh6rliqjlh7rnjrDlnKjkuLvlsY/lj7PljYrlsY/vvIzmiZjnm5jljLrmnInlm77moIflj6/ov5vorr7nva4KCiMjIyBtYWNPUwoKMS4g5ZyoIFsqKlJlbGVhc2VzKipdKGh0dHBzOi8vZ2l0aHViLmNvbS9zc2x6aG91OTQ4L2Zpbi1jYWxlbmRhci13aWRnZXQvcmVsZWFzZXMpIOmhtemdouS4i+i9veacgOaWsOeJiOeahCBgKi5kbWdgCjIuIOaLluWFpSLlupTnlKjnqIvluo8i5paH5Lu25aS55Y2z5Y+vCgo+ICoq5om+5LiN5YiwIFJlbGVhc2Vz77yfKiog6K+05piO5q2j5byP54mI6L+Y5Zyo5p6E5bu65Lit77yM5Lmf5Y+v5Lul5Y67IFtBY3Rpb25zXShodHRwczovL2dpdGh1Yi5jb20vc3NsemhvdTk0OC9maW4tY2FsZW5kYXItd2lkZ2V0L2FjdGlvbnMpIOaJvuacgOaWsOS4gOasoeaIkOWKn+eahOaehOW7uu+8jOWcqOmhtemdouW6lemDqCBBcnRpZmFjdHMg5qCP5LiL6L295a6J6KOF5YyF44CCCgojIyDllpzmrKLlroPvvJ/or7fnu5nkuKogU3RhciDirZAKCui/meS4qumhueebruaYr+S4muS9meaXtumXtOeLrOeri+W8gOWPkeeahO+8jOayoeacieWboumYn+OAgeayoeacieaOqOW5v+mihOeul+OAgioq5L2g55qE5q+P5LiA5LiqIFN0YXIg6YO95piv5a6e5a6e5Zyo5Zyo55qE6byT5YqxKirvvIzkuZ/kvJrorqnmm7TlpJrkuqTmmJPogIXlj5HnjrDlroPjgIIKCi0g6KeJ5b6X5aW955SoIOKGkiDngrnkuKog4q2QIFN0YXIKLSDmnInmg7Pms5UgLyDpgYfliLAgQnVnIOKGkiDmj5DkuKogW0lzc3VlXShodHRwczovL2dpdGh1Yi5jb20vc3NsemhvdTk0OC9maW4tY2FsZW5kYXItd2lkZ2V0L2lzc3VlcykKLSDkvJrlhpnku6PnoIEg4oaSIOasoui/jiBQUgoKLS0tCgo8ZGV0YWlscz4KPHN1bW1hcnk+5byA5Y+R6ICF5L+h5oGv77yI54K55Ye75bGV5byA77yJPC9zdW1tYXJ5PgoKLSDmioDmnK/moIjvvJpUYXVyaSB2Mu+8iFJ1c3QgKyDns7vnu58gV2ViVmlld++8ie+8jOS4gOWll+S7o+eggee8liBXaW5kb3dzIC8gbWFjT1MKLSDliLfmlrDmnLrliLbvvJrkuovku7bpqbHliqjvvIzpm7bova7or6Ig4oCU4oCUIOavj+WRqOaXpSAwIOeCueWFqOmHjyArIOW8gOacuuWvuei0puihpeaLiSArIOWFrOW4g+WQjue6piAyIOWIhumSn+WUpOmGkuabtOaWsOWunumZheWAvAotIOaYvuekuu+8muWFqOmDqOWMl+S6rOaXtumXtO+8m+S4ieexu+ihjO+8iOaVsOaNruihjOS4ieagjyAvIOS6i+S7tuihjOe0p+WHkeWNleihjCAvIOWBh+acn+ihjOa3oeWMlu+8ie+8m+S4reaAp+edgOiJsu+8m+WchuW9ouWbveaXlyArIOWbveWutue8qeWGme+8m+e6r+eCueWHu+epv+mAjwoKYGBgYmFzaApucG0gaW5zdGFsbApucHggdGF1cmkgZGV2ICAgICAgIyDosIPor5Xov5DooYwKbnB4IHRhdXJpIGJ1aWxkICAgICMg5omT5a6J6KOF5YyF77yIV2luZG93czogbXNpL25zaXPvvJttYWNPUzogZG1n77yJCmBgYAoK5LqR5p6E5bu677yaYC5naXRodWIvd29ya2Zsb3dzL2J1aWxkLnltbGDvvIjpnIDmiYvliqjkuIrkvKDvvIzop4Hmlofku7blpLTms6jph4rvvInjgIJwdXNoIHRhZyBgdipgIOWQjuWcqCBXaW5kb3dzIC8gbWFjT1Mg5LqR5Li75py66Ieq5Yqo5p6E5bu65bm25Y+R5biDIGRyYWZ0IFJlbGVhc2XjgIIKCuivpue7humcgOaxguingSBbYFBSRC5tZGBdKC4vUFJELm1kKe+8jOaKgOacr+aWueahiOingSBbYGRvY3MvVEVDSC1ERVNJR04ubWRgXSguL2RvY3MvVEVDSC1ERVNJR04ubWQp44CCCgo8L2RldGFpbHM+Cg==
+# 📅 桌面财经日历挂件
+
+**把未来一周的财经大事，直接"贴"在你的桌面壁纸上。**
+
+> 如果这个项目对你有帮助，欢迎点右上角的 ⭐ **Star** 支持一下！你的 Star 是我持续更新的最大动力。
+
+---
+
+## 为什么你需要它？
+
+做美股、期货、外汇交易，最怕的就是**错过关键数据**：非农、CPI、议息决议……这些数字一公布，行情可能瞬间波动几个百分点。
+
+但现实是：财经网站要主动打开才看得到，手机 App 的推送要么延迟要么被淹没在消息堆里，等你想起来查，日内最重要的行情已经走完了。
+
+这个挂件就是为解决这个痛点而生的：**它像一层透明薄膜一样浮在你的壁纸上，右半屏静静展示未来一周所有重要财经事件**——不用打开任何软件，余光一扫就知道今晚有什么大事。
+
+## 它能帮你做什么？
+
+- 👀 **一眼掌握本周大事**：非农、CPI、央行决议……按天分组，重要程度用星级标好，3 星以下自动过滤不打扰你
+- ⏰ **再也不用算时差**：所有时间自动换算成北京时间，美东夏冬令时切换不用你操心
+- 📊 **数据一公布就看到结果**：预期值 / 前值 / 实际值三栏对照，超预期标绿、低预期标红，一目了然
+- 🔔 **重要数据公布时弹窗提醒**：盯盘时不用分心去刷手机
+- 🪟 **完全不打扰你干活**：透明叠加在壁纸上不替换壁纸，鼠标直接点穿（点不中、挡不住），桌面图标该在哪还在哪
+- 🎨 **长得好看还能调**：毛玻璃面板、7 处颜色自定义、面板宽度、左右半屏、字号，随你调
+- 🪶 **轻到忘记它在运行**：事件驱动刷新（只在数据公布前后唤醒），不轮询、不占资源，开机自启、托盘常驻
+- 🌍 **多市场覆盖**：默认中美，可加选欧元区、英国、日本等；数据源故障自动降级，断网也有本地缓存兜底
+
+## 适合谁？
+
+- 做美股 / 期货 / 外汇 / 黄金原油的交易者
+- 需要跟踪宏观数据、央行动态的投资者
+- 讨厌开一堆网页查日历，想要桌面一眼可见的人
+
+## 效果图
+
+![挂件主面板（右半屏·毛玻璃）](docs/screenshots/widget-right-frosted.png)
+
+![设置页](docs/screenshots/widget-settings-full.png)
+
+## 下载安装
+
+### Windows
+
+1. 打开本仓库的 [**Releases**](https://github.com/sslzhou948/fin-calendar-widget/releases) 页面
+2. 下载最新版的 `FinCalendarWidget_*.exe`（安装向导，推荐）或 `*.msi`
+3. 双击运行安装（首次运行 Windows 可能会弹 SmartScreen 警告，点"更多信息" → "仍要运行"即可，软件无签名属正常情况）
+4. 安装完成后挂件自动出现在主屏右半屏，托盘区有图标可进设置
+
+### macOS
+
+1. 在 [**Releases**](https://github.com/sslzhou948/fin-calendar-widget/releases) 页面下载最新版的 `*.dmg`
+2. 拖入"应用程序"文件夹即可
+
+> **找不到 Releases？** 说明正式版还在构建中，也可以去 [Actions](https://github.com/sslzhou948/fin-calendar-widget/actions) 找最新一次成功的构建，在页面底部 Artifacts 栏下载安装包。
+
+## 喜欢它？请给个 Star ⭐
+
+这个项目是业余时间独立开发的，没有团队、没有推广预算。**你的每一个 Star 都是实实在在的鼓励**，也会让更多交易者发现它。
+
+- 觉得好用 → 点个 ⭐ Star
+- 有想法 / 遇到 Bug → 提个 [Issue](https://github.com/sslzhou948/fin-calendar-widget/issues)
+- 会写代码 → 欢迎 PR
+
+---
+
+<details>
+<summary>开发者信息（点击展开）</summary>
+
+- 技术栈：Tauri v2（Rust + 系统 WebView），一套代码编 Windows / macOS
+- 刷新机制：事件驱动，零轮询 —— 每周日 0 点全量 + 开机对账补拉 + 公布后约 2 分钟唤醒更新实际值
+- 显示：全部北京时间；三类行（数据行三栏 / 事件行紧凑单行 / 假期行淡化）；中性着色；圆形国旗 + 国家缩写；纯点击穿透
+
+```bash
+npm install
+npx tauri dev      # 调试运行
+npx tauri build    # 打安装包（Windows: msi/nsis；macOS: dmg）
+```
+
+云构建：`.github/workflows/build.yml`（需手动上传，见文件头注释）。push tag `v*` 后在 Windows / macOS 云主机自动构建并发布 draft Release。
+
+详细需求见 [`PRD.md`](./PRD.md)，技术方案见 [`docs/TECH-DESIGN.md`](./docs/TECH-DESIGN.md)。
+
+</details>
