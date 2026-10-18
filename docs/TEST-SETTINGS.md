@@ -89,6 +89,16 @@
   前端 `fillForm` 读 `c.notify` 得 `undefined`——设置页打开时该开关**恒显示未勾选**。
 - 修复：前端统一改用 `notifications` 键（`settings.js` DEFAULT_CONFIG/readForm/fillForm、
   `app.js` DEFAULT_CONFIG+注释），与后端字段对齐；无历史数据迁移问题（新产品）。
-- 回归验证（headless Chromium，`/tmp/pptr/regress-bug1.mjs`）：R1 默认勾选 / R2
-  取消勾选保存后 localStorage 为 `{"notifications":false}` 且无残留 `notify` 键 /
-  R3 刷新回填未勾选 / R4 重新开启保存 `true`——4/4 通过。
+## 2026-10-18 补充验收：面板宽度 + 颜色自定义（11/11 通过）
+
+- W1 宽度滑杆默认 42% / W2a 标签实时更新 / W2b 保存 `panel_width_pct=60` /
+  W2c 刷新回填 60%
+- C1 取色器默认值（7 色）/ C2a 保存颜色 / C2b 刷新回填 / C3 恢复默认按钮 /
+  C4 主面板 CSS 变量生效且超预期渲染色跟随（`rgb(0,255,0)`）/ C5 无配置回退默认
+- 老测试回归：14/14 通过（T4a 期望值已同步新字段；T7 选择器已同步 v4 DOM 结构）
+
+### BUG-2（已修复 2026-10-18）：数值着色未生效
+- `.ev .vals b { color: var(--text) }`（0,2,1）覆盖了 `.dev-beat/.dev-miss/.dev-inline`
+  （0,1,0）——用户从截图发现实际值无红绿灰区分。
+- 修复：改为 `.ev .vals b.dev-beat` 等高优先级选择器；headless 验证三色渲染正确
+ （beat `rgb(74,222,128)` / miss `rgb(248,113,113)` / inline `rgb(156,163,175)`）。
