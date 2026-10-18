@@ -1,10 +1,12 @@
 //! 刷新调度：零轮询，全部用 tokio::time::sleep 精确到点触发（TECH-DESIGN §4）。
 //!
-//! 三类任务：
+//! 四类任务：
 //! ① 每周日 00:00（Asia/Shanghai）全量 `fetch_week`（`schedule::next_sunday_midnight`）；
 //! ② 启动时 `reconcile()`：covered_week 过期 → 全量补拉；已过发布时间但 actual 为空 → 补拉；
 //! ③ 事件驱动唤醒：`schedule::build_wake_list()` → 每事件 release_at+2min 到点刷新 actual。
 //! 唤醒时间表在"全量刷新 / 配置变更 / 对账"后重建（经 `AppState::request_rebuild` 信号）。
+//! ④ 兜底扫尾：每 15 分钟检查已过发布时间但 actual 仍为空的数据行，重试拉取。
+//! 覆盖两种缺口：③ 那次拉取失败（两路源都挂），或数据源公布延迟（+2min 时还没出数）。
 //!
 //! 拉取统一走 `caldata::source::fetch_week_with_fallback`（Primary → Backup → 本地缓存），
 //! `FetchOutcome.from_cache` 为 true 时表示两路都失败、兜底用了缓存。
@@ -50,6 +52,15 @@ pub fn spawn(app: AppHandle, wake_rx: tokio::sync::mpsc::Receiver<()>) {
 
     // ③ 事件驱动唤醒循环
     tauri::async_runtime::spawn(wake_loop(app, wake_rx));
+
+    // ④ 兜底扫尾：每 15 分钟重试仍缺 actual 的数据行
+    let app4 = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(15 * 60)).await;
+            sweep_stale_actuals(&app4).await;
+        }
+    });
 }
 
 /// 启动时对账（TECH-DESIGN §4.2）
@@ -239,6 +250,44 @@ async fn fire_due(app: &AppHandle, wakes: &mut Vec<(DateTime<Tz>, String)>) {
         let newly = state.apply_actuals(&outcome.events);
         crate::notifier::notify_new_actuals(app, &newly).await;
         crate::notifier::notify_due_events(app).await;
+    }
+    emit_updated(app);
+}
+
+/// 兜底扫尾：已过发布时间（2 分钟前）但 actual 仍为空的数据行，重试拉取。
+/// 覆盖 fire_due 那次拉取失败，或数据源公布延迟（+2min 时还没出数）两种缺口。
+/// 候选周由 `schedule::stale_weeks` 纯函数算出（48 小时前的陈旧事件不再扫）。
+async fn sweep_stale_actuals(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let now = now_sh();
+
+    let weeks: Vec<NaiveDate> = {
+        let cache = state.cache_snapshot();
+        schedule::stale_weeks(&cache.events, now)
+    };
+    if weeks.is_empty() {
+        return;
+    }
+    eprintln!("[scheduler] 扫尾重试 {} 个周的 actual", weeks.len());
+    let cfg = state.config_snapshot();
+    let sources = state.sources();
+    for ws in weeks {
+        let outcome = fetch_week_with_fallback(
+            &sources.primary,
+            &sources.backup,
+            cfg.to_source_mode(),
+            ws,
+            None,
+        )
+        .await;
+        if outcome.from_cache {
+            state.set_last_error(Some(format_errors(&outcome)));
+            continue; // 下一轮 15 分钟后再试
+        }
+        let newly = state.apply_actuals(&outcome.events);
+        if !newly.is_empty() {
+            crate::notifier::notify_new_actuals(app, &newly).await;
+        }
     }
     emit_updated(app);
 }
