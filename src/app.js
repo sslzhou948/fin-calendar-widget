@@ -20,7 +20,8 @@
  *    - 所有字段缺失时前端必须容忍，不得崩溃。
  *  Config: { countries:[..], min_stars, side('left'|'right'),
  *            font_size(12-18), frosted(bool), notifications(bool), source('auto'|'primary'|'backup'),
- *            usd_mode(bool), notify_events(bool), hide_holidays(bool) }
+ *            usd_mode(bool), notify_events(bool), hide_holidays(bool),
+ *            panel_width_pct(25-75), colors:{time,stars,beat,miss,inline,text,muted} }
  */
 (function () {
   'use strict';
@@ -35,7 +36,13 @@
     source: 'auto',
     usd_mode: false,       // 美元口径：按 usd_sentiment(bull=红/bear=绿) 给实际值着色
     notify_events: false,   // 事件类（讲话/纪要）也发系统通知
-    hide_holidays: false    // 隐藏假期行
+    hide_holidays: false,   // 隐藏假期行
+    panel_width_pct: 42,    // 面板宽度占屏幕宽度的百分比 25–75（Rust 端调窗口）
+    colors: {               // 颜色主题（与 styles.css :root / Rust 默认值保持一致）
+      time: '#f0a832', stars: '#ffd166',
+      beat: '#4ade80', miss: '#f87171', inline: '#9ca3af',
+      text: '#eceff4', muted: '#9aa4b5'
+    }
   };
 
   var MIN_FS = 9;   /* 方案A floor：再小中文即不可读 */
@@ -56,9 +63,20 @@
   function applyConfigToDom() {
     var fs = clampInt(config.font_size, 12, 18, 14);
     config.font_size = fs;
-    document.documentElement.style.setProperty('--fs', fs + 'px');
+    var root = document.documentElement;
+    root.style.setProperty('--fs', fs + 'px');
     document.body.classList.toggle('no-frosted', !config.frosted);
     document.body.classList.toggle('side-left', config.side === 'left');
+    /* 颜色主题：配置缺失时回退默认值 */
+    var dc = DEFAULT_CONFIG.colors;
+    var cc = Object.assign({}, dc, config.colors || {});
+    root.style.setProperty('--amber', cc.time);
+    root.style.setProperty('--gold', cc.stars);
+    root.style.setProperty('--c-beat', cc.beat);
+    root.style.setProperty('--c-miss', cc.miss);
+    root.style.setProperty('--c-inline', cc.inline);
+    root.style.setProperty('--text', cc.text);
+    root.style.setProperty('--muted', cc.muted);
   }
 
   function mergeConfig(c) {
