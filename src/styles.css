@@ -3,8 +3,8 @@
 
 :root {
   --fs: 14px;                              /* 挂件字号，可被 JS 逐级缩小 */
-  --bg-panel: rgba(13, 18, 30, .32);       /* v4：更通透，毛玻璃保可读 */
-  --bg-panel-solid: rgba(10, 12, 20, .88);
+  --bg-panel: rgba(13, 18, 30, var(--frost-opacity, .7)); /* 透明度由设置滑杆控制 */
+  --bg-panel-solid: rgba(10, 12, 20, var(--frost-opacity, .88)); /* 纯色模式同样跟随透明度滑杆 */
   --border: rgba(255, 255, 255, .10);
   /* —— 颜色主题（可被配置覆盖，见 app.js applyConfigToDom） —— */
   --text: #eceff4;                         /* 正文 */
@@ -47,7 +47,8 @@ body.side-left { justify-content: flex-start; }
 
 /* ---------------- 挂件面板（v4：右半屏 / 按天分组 / 金十味） ---------------- */
 #panel {
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   max-height: calc(100vh - 24px);
   overflow: hidden;
   display: flex;
@@ -83,7 +84,6 @@ body.no-frosted #panel {
 .p-title-wrap { display: flex; align-items: baseline; gap: 0.7em; min-width: 0; }
 .p-title { font-size: 1.07em; font-weight: 700; letter-spacing: .08em; white-space: nowrap; }
 .p-sub { font-size: .78em; color: var(--muted); white-space: nowrap; }
-.p-quote { font-size: .78em; color: var(--muted); white-space: nowrap; }
 
 /* 按天分组 */
 .day-group { margin-bottom: 0.5em; }
@@ -125,7 +125,7 @@ body.no-frosted #panel {
   font-size: .85em;
   letter-spacing: .08em;
   white-space: nowrap;
-  margin-left: auto;
+  margin-left: 0.6em;
 }
 .ev .stars .off { color: rgba(255, 255, 255, .18); }
 
