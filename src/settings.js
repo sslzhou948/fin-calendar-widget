@@ -24,8 +24,21 @@
     source: 'auto',
     usd_mode: false,
     notify_events: false,
-    hide_holidays: false
+    hide_holidays: false,
+    panel_width_pct: 42,
+    colors: {
+      time: '#f0a832', stars: '#ffd166',
+      beat: '#4ade80', miss: '#f87171', inline: '#9ca3af',
+      text: '#eceff4', muted: '#9aa4b5'
+    }
   };
+
+  /* 颜色字段 id → config.colors 键 */
+  var COLOR_FIELDS = [
+    ['cTime', 'time'], ['cStars', 'stars'],
+    ['cBeat', 'beat'], ['cMiss', 'miss'], ['cInline', 'inline'],
+    ['cText', 'text'], ['cMuted', 'muted']
+  ];
 
   var T = (typeof window !== 'undefined') ? window.__TAURI__ : undefined;
 
@@ -65,22 +78,29 @@
       document.querySelectorAll('input[name="country"]:checked')
     ).map(function (i) { return i.value; });
     var sideEl = document.querySelector('input[name="side"]:checked');
+    var colors = {};
+    COLOR_FIELDS.forEach(function (pair) {
+      colors[pair[1]] = el(pair[0]).value;
+    });
     return {
       countries: countries,
       min_stars: parseInt(el('minStars').value, 10),
       side: sideEl ? sideEl.value : 'right',
       font_size: parseInt(el('fontSize').value, 10),
+      panel_width_pct: parseInt(el('panelWidth').value, 10),
       frosted: el('frosted').checked,
       notifications: el('notify').checked,
       usd_mode: el('usdMode').checked,
       notify_events: el('notifyEvents').checked,
       hide_holidays: el('hideHolidays').checked,
+      colors: colors,
       source: el('source').value
     };
   }
 
   function fillForm(cfg) {
     var c = Object.assign({}, DEFAULT_CONFIG, cfg);
+    c.colors = Object.assign({}, DEFAULT_CONFIG.colors, cfg.colors || {});
     Array.prototype.forEach.call(
       document.querySelectorAll('input[name="country"]'),
       function (i) { i.checked = c.countries.indexOf(i.value) !== -1; }
@@ -90,11 +110,16 @@
     if (sideEl) sideEl.checked = true;
     el('fontSize').value = String(c.font_size);
     el('fontSizeVal').textContent = c.font_size + ' px';
+    el('panelWidth').value = String(c.panel_width_pct);
+    el('panelWidthVal').textContent = c.panel_width_pct + '%';
     el('frosted').checked = !!c.frosted;
     el('notify').checked = !!c.notifications;
     el('usdMode').checked = !!c.usd_mode;
     el('notifyEvents').checked = !!c.notify_events;
     el('hideHolidays').checked = !!c.hide_holidays;
+    COLOR_FIELDS.forEach(function (pair) {
+      el(pair[0]).value = c.colors[pair[1]];
+    });
     el('source').value = c.source;
   }
 
@@ -182,6 +207,16 @@
 
     el('fontSize').addEventListener('input', function () {
       el('fontSizeVal').textContent = el('fontSize').value + ' px';
+    });
+
+    el('panelWidth').addEventListener('input', function () {
+      el('panelWidthVal').textContent = el('panelWidth').value + '%';
+    });
+
+    el('resetColorsBtn').addEventListener('click', function () {
+      COLOR_FIELDS.forEach(function (pair) {
+        el(pair[0]).value = DEFAULT_CONFIG.colors[pair[1]];
+      });
     });
 
     el('testBtn').addEventListener('click', runTest);
