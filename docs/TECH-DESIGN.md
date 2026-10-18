@@ -129,6 +129,7 @@ pub trait DataSource: Send + Sync {
 
 1. **整周全量刷新**：每周日 00:00（Asia/Shanghai）`fetch_week`。用 `schedule.rs` 纯函数
    `next_sunday_midnight(now) -> DateTime` 计算下一次触发点，单测覆盖。
+   失败时有界重试：每小时一次、最多 3 次；仍失败则等下周日（开机对账覆盖关机场景）。
 2. **开机/唤醒对账**：启动时 + 系统唤醒事件（Tauri 可监听）→ `reconcile()`：
    - 本地缓存记录 `covered_week: (year, week)`；若当前周 ≠ covered_week → 立即全量拉取。
    - 对本周已过发布时间但 `actual` 为空的事件 → 补拉一次（只拉当天/当周增量）。
