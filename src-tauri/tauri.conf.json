@@ -1,1 +1,48 @@
-{"$schema":"https://schema.tauri.app/config/2","app":{"security":{"csp":null},"windows":[{"alwaysOnTop":false,"decorations":false,"focus":false,"height":1000,"label":"main","resizable":false,"skipTaskbar":true,"title":"FinCalendar","transparent":true,"url":"index.html","visible":true,"width":800}]},"build":{"beforeBuildCommand":"","beforeDevCommand":"","devUrl":"http://localhost:1420","frontendDist":"../src"},"bundle":{"active":true,"category":"Utility","icon":["icons/32x32.png","icons/128x128.png","icons/128x128@2x.png","icons/icon.icns","icons/icon.ico"],"macOS":{"minimumSystemVersion":"10.15"}},"identifier":"com.example.fincalendarwidget","productName":"FinCalendarWidget","version":"0.1.0"}
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "alwaysOnTop": false,
+        "decorations": false,
+        "focus": false,
+        "height": 1000,
+        "label": "main",
+        "resizable": false,
+        "skipTaskbar": true,
+        "title": "FinCalendar",
+        "transparent": true,
+        "url": "index.html",
+        "visible": true,
+        "width": 800
+      }
+    ],
+    "withGlobalTauri": true
+  },
+  "build": {
+    "beforeBuildCommand": "",
+    "beforeDevCommand": "",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../src"
+  },
+  "bundle": {
+    "active": true,
+    "category": "Utility",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
+  },
+  "identifier": "com.example.fincalendarwidget",
+  "productName": "FinCalendarWidget",
+  "version": "0.1.0"
+}
