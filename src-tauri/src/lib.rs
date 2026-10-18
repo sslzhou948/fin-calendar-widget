@@ -31,7 +31,7 @@ use serde::Serialize;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::TrayIconBuilder,
-    AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder,
 };
 
 use state::{AppState, Config};
@@ -209,6 +209,11 @@ async fn set_config(
     config.validate()?;
     state.save_config(config)?;
     position_main_window(&app);
+    // 通知主窗口立即重渲染（配置变更即时生效）
+    let payload = build_widget_state(&state);
+    if let Err(e) = app.emit("calendar-updated", payload) {
+        eprintln!("[set_config] 发送 calendar-updated 失败: {e}");
+    }
     let app2 = app.clone();
     tauri::async_runtime::spawn(async move {
         scheduler::full_refresh(&app2).await;
