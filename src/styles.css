@@ -6,10 +6,14 @@
   --bg-panel: rgba(13, 18, 30, .32);       /* v4：更通透，毛玻璃保可读 */
   --bg-panel-solid: rgba(10, 12, 20, .88);
   --border: rgba(255, 255, 255, .10);
-  --text: #eceff4;
-  --muted: #9aa4b5;
-  --gold: #ffd166;
-  --amber: #f0a832;                        /* 时间琥珀色（金十味） */
+  /* —— 颜色主题（可被配置覆盖，见 app.js applyConfigToDom） —— */
+  --text: #eceff4;                         /* 正文 */
+  --muted: #9aa4b5;                        /* 次要文字 */
+  --amber: #f0a832;                        /* 时间（金十味） */
+  --gold: #ffd166;                         /* 星级 */
+  --c-beat: #4ade80;                       /* 超预期 */
+  --c-miss: #f87171;                       /* 低预期 */
+  --c-inline: #9ca3af;                     /* 符合预期 */
   --bull: #ff6b6b;                         /* 利多红 */
   --bear: #51cf66;                         /* 利空绿 */
   --near-border: rgba(255, 209, 102, .6);
@@ -176,9 +180,9 @@ body.no-frosted #panel {
   margin: 0 0.35em 0 0.9em;
   vertical-align: baseline;
 }
-.p-foot .dot.dev-beat { background: #4ade80; }
-.p-foot .dot.dev-miss { background: #f87171; }
-.p-foot .dot.dev-inline { background: #9ca3af; }
+.p-foot .dot.dev-beat { background: var(--c-beat); }
+.p-foot .dot.dev-miss { background: var(--c-miss); }
+.p-foot .dot.dev-inline { background: var(--c-inline); }
 
 #empty {
   padding: 2em 1em;
@@ -231,6 +235,11 @@ select option { background: #14161f; }
 
 input[type="range"] { width: 220px; accent-color: var(--accent); }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width: 16px; height: 16px; }
+input[type="color"] {
+  width: 44px; height: 28px; padding: 2px;
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+}
 .range-val { font-size: 14px; min-width: 4em; color: var(--gold); }
 
 .s-btns { display: flex; gap: 12px; margin-top: 4px; }
@@ -312,9 +321,9 @@ button.btn.primary:hover { background: #1864ab; }
 
 /* 实际值着色：中性口径（deviation）— 绿=超预期 / 红=低预期 / 灰=符合预期
  * 注意：必须带 .ev .vals b 前缀，否则会被上面的 .ev .vals b{color:var(--text)} 覆盖 */
-.ev .vals b.dev-beat { color: #4ade80; }
-.ev .vals b.dev-miss { color: #f87171; }
-.ev .vals b.dev-inline { color: #9ca3af; }
+.ev .vals b.dev-beat { color: var(--c-beat); }
+.ev .vals b.dev-miss { color: var(--c-miss); }
+.ev .vals b.dev-inline { color: var(--c-inline); }
 
 /* 美元口径着色（usd_mode）：利多红 / 利空绿，染实际值 */
 .ev .vals b.bull { color: var(--bull); }
