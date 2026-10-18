@@ -62,7 +62,8 @@ pub fn spawn(app: AppHandle, wake_rx: tokio::sync::mpsc::Receiver<()>) {
     });
 
     // ③ 事件驱动唤醒循环
-    tauri::async_runtime::spawn(wake_loop(app, wake_rx));
+    let app3 = app.clone();
+    tauri::async_runtime::spawn(wake_loop(app3, wake_rx));
 
     // ④ 兜底扫尾：每 15 分钟重试仍缺 actual 的数据行
     let app4 = app.clone();
