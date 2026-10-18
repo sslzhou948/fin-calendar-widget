@@ -120,7 +120,9 @@ jobs:
         shell: bash
         run: |
           node scripts/generate-icons.mjs
-          npx tauri icon src-tauri/icons/icon.png --output src-tauri/icons
+          # 注意：必须显式写 @tauri-apps/cli。bare `npx tauri` 会去拉 npm 上
+          # 同名的占位包（无可执行文件）而报 "could not determine executable"。
+          npx --yes @tauri-apps/cli icon src-tauri/icons/icon.png --output src-tauri/icons
 
       - name: Build with tauri-action
         uses: tauri-apps/tauri-action@v0
