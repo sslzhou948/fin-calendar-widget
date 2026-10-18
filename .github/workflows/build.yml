@@ -66,6 +66,23 @@ jobs:
         shell: bash
         run: npm install --no-audit --no-fund
 
+      - name: Smoke test Tauri bridge
+        shell: bash
+        run: |
+          echo "=== 检查 withGlobalTauri ==="
+          python3 -c "
+          import json, sys
+          with open('src-tauri/tauri.conf.json') as f:
+              c = json.load(f)
+          v = c.get('app', {}).get('withGlobalTauri', False)
+          print('withGlobalTauri =', v)
+          sys.exit(0 if v is True else 1)
+          "
+          echo "=== 检查前端无残留引用 ==="
+          ! grep -rn "p-quote\|dayQuote" src/index.html src/app.js && echo "无格言残留 OK"
+          echo "=== 检查取色器 data-key ==="
+          test $(grep -c 'data-color-key' src/settings.html) -eq 7 && echo "7 个取色器接线 OK"
+
       - name: Render screenshots (headless Chrome)
         shell: bash
         env:
