@@ -47,6 +47,64 @@ fn default_source() -> String {
 fn default_importance_map() -> HashMap<u8, u8> {
     [(1u8, 1u8), (2u8, 3u8), (3u8, 5u8)].into_iter().collect()
 }
+fn default_panel_width_pct() -> u8 {
+    42
+}
+// 颜色主题默认值（与 styles.css :root 保持一致）
+fn c_time() -> String { "#f0a832".to_string() }
+fn c_stars() -> String { "#ffd166".to_string() }
+fn c_beat() -> String { "#4ade80".to_string() }
+fn c_miss() -> String { "#f87171".to_string() }
+fn c_inline() -> String { "#9ca3af".to_string() }
+fn c_text() -> String { "#eceff4".to_string() }
+fn c_muted() -> String { "#9aa4b5".to_string() }
+
+/// 颜色主题：挂件元素颜色自定义（设置页取色器，v1.1）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ColorTheme {
+    #[serde(default = "c_time")]
+    pub time: String,
+    #[serde(default = "c_stars")]
+    pub stars: String,
+    #[serde(default = "c_beat")]
+    pub beat: String,
+    #[serde(default = "c_miss")]
+    pub miss: String,
+    #[serde(default = "c_inline")]
+    pub inline: String,
+    #[serde(default = "c_text")]
+    pub text: String,
+    #[serde(default = "c_muted")]
+    pub muted: String,
+}
+
+impl Default for ColorTheme {
+    fn default() -> Self {
+        Self {
+            time: c_time(), stars: c_stars(), beat: c_beat(), miss: c_miss(),
+            inline: c_inline(), text: c_text(), muted: c_muted(),
+        }
+    }
+}
+
+impl ColorTheme {
+    /// 校验：必须为 #rrggbb 格式
+    pub fn validate(&self) -> Result<(), String> {
+        for (name, v) in [
+            ("time", &self.time), ("stars", &self.stars), ("beat", &self.beat),
+            ("miss", &self.miss), ("inline", &self.inline),
+            ("text", &self.text), ("muted", &self.muted),
+        ] {
+            let b = v.as_bytes();
+            if b.len() != 7 || b[0] != b'#'
+                || !b[1..].iter().all(|c| c.is_ascii_hexdigit())
+            {
+                return Err(format!("颜色 {name} 须为 #rrggbb 格式，当前为 {v}"));
+            }
+        }
+        Ok(())
+    }
+}
 
 /// 挂件配置（设置页可调，TECH-DESIGN §8）
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,6 +143,12 @@ pub struct Config {
     /// 隐藏假期行，默认关闭
     #[serde(default = "default_false")]
     pub hide_holidays: bool,
+    /// 面板宽度占屏幕宽度的百分比，25–75，默认 42（设置页滑杆可调）
+    #[serde(default = "default_panel_width_pct")]
+    pub panel_width_pct: u8,
+    /// 颜色主题（元素颜色自定义）
+    #[serde(default)]
+    pub colors: ColorTheme,
 }
 
 impl Default for Config {
@@ -101,6 +165,8 @@ impl Default for Config {
             usd_mode: default_false(),
             notify_events: default_false(),
             hide_holidays: default_false(),
+            panel_width_pct: default_panel_width_pct(),
+            colors: ColorTheme::default(),
         }
     }
 }
@@ -122,6 +188,10 @@ impl Config {
         if self.countries.is_empty() {
             return Err("countries 不能为空".to_string());
         }
+        if !(25..=75).contains(&self.panel_width_pct) {
+            return Err("panel_width_pct 必须在 25–75 之间".to_string());
+        }
+        self.colors.validate()?;
         Ok(())
     }
 
