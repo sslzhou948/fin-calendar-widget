@@ -310,10 +310,11 @@ button.btn.primary:hover { background: #1864ab; }
 .ev-holiday .flag, .ev-holiday .flag-fb { width: 14px; height: 14px; font-size: 8px; }
 .ev-holiday .title { color: var(--muted); }
 
-/* 实际值着色：中性口径（deviation）— 绿=超预期 / 红=低预期 / 灰=符合预期 */
-.dev-beat { color: #4ade80; }
-.dev-miss { color: #f87171; }
-.dev-inline { color: #9ca3af; }
+/* 实际值着色：中性口径（deviation）— 绿=超预期 / 红=低预期 / 灰=符合预期
+ * 注意：必须带 .ev .vals b 前缀，否则会被上面的 .ev .vals b{color:var(--text)} 覆盖 */
+.ev .vals b.dev-beat { color: #4ade80; }
+.ev .vals b.dev-miss { color: #f87171; }
+.ev .vals b.dev-inline { color: #9ca3af; }
 
 /* 美元口径着色（usd_mode）：利多红 / 利空绿，染实际值 */
 .ev .vals b.bull { color: var(--bull); }
