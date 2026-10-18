@@ -34,6 +34,12 @@
       <label class="item"><input type="radio" name="side" value="left"> 左半屏</label>
     </div>
     <div class="s-row">
+      <span class="name">面板宽度</span>
+      <input type="range" id="panelWidth" min="25" max="75" step="1" value="42">
+      <span class="range-val" id="panelWidthVal">42%</span>
+      <span class="note" style="color:var(--muted);font-size:12px">占屏幕宽度的百分比（默认 42%，原固定 50% 上限已放开）</span>
+    </div>
+    <div class="s-row">
       <span class="name">字号</span>
       <input type="range" id="fontSize" min="12" max="18" step="1" value="14">
       <span class="range-val" id="fontSizeVal">14 px</span>
@@ -60,6 +66,33 @@
         <option value="primary">主数据源（Investing 小工具）</option>
         <option value="backup">备用数据源（JSON 接口）</option>
       </select>
+    </div>
+  </div>
+
+  <div class="s-card">
+    <h2>颜色自定义</h2>
+    <div class="s-row">
+      <span class="name">时间</span>
+      <input type="color" id="cTime" value="#f0a832">
+      <span class="name">星级</span>
+      <input type="color" id="cStars" value="#ffd166">
+    </div>
+    <div class="s-row">
+      <span class="name">超预期</span>
+      <input type="color" id="cBeat" value="#4ade80">
+      <span class="name">低预期</span>
+      <input type="color" id="cMiss" value="#f87171">
+      <span class="name">符合预期</span>
+      <input type="color" id="cInline" value="#9ca3af">
+    </div>
+    <div class="s-row">
+      <span class="name">正文</span>
+      <input type="color" id="cText" value="#eceff4">
+      <span class="name">次要文字</span>
+      <input type="color" id="cMuted" value="#9aa4b5">
+    </div>
+    <div class="s-row">
+      <button class="btn" id="resetColorsBtn">恢复默认颜色</button>
     </div>
   </div>
 
