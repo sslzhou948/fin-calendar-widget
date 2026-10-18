@@ -7,7 +7,7 @@
  *
  * 后端契约（供 src-tauri 实现参考）：
  *  - command get_state() -> { events: CalendarEvent[], config: Config }
- *  - event   calendar-updated（无 payload，前端收到后重新 get_state）
+ *  - event   calendar-updated（payload 为 WidgetState，前端直接应用；无 payload 时回退 get_state）
  *  CalendarEvent: { id, release_at(ISO, 北京时间), time('HH:mm' 备用),
  *                   country('CN'|'US'|...), kind('data'|'event'|'holiday'),
  *                   title, importance(1-5),
@@ -38,6 +38,7 @@
     notify_events: false,   // 事件类（讲话/纪要）也发系统通知
     hide_holidays: false,   // 隐藏假期行
     panel_width_pct: 42,    // 面板宽度占屏幕宽度的百分比 25–75（Rust 端调窗口）
+    frost_opacity: 70,      // 毛玻璃背景不透明度 0–100
     colors: {               // 颜色主题（与 styles.css :root / Rust 默认值保持一致）
       time: '#f0a832', stars: '#ffd166',
       beat: '#4ade80', miss: '#f87171', inline: '#9ca3af',
@@ -77,6 +78,10 @@
     root.style.setProperty('--c-inline', cc.inline);
     root.style.setProperty('--text', cc.text);
     root.style.setProperty('--muted', cc.muted);
+    /* 毛玻璃不透明度 0–100 → CSS 变量（非法值回退默认 70，避免面板隐身） */
+    var fo = clampInt(config.frost_opacity, 0, 100, 70);
+    config.frost_opacity = fo;
+    root.style.setProperty('--frost-opacity', (fo / 100).toFixed(2));
   }
 
   function mergeConfig(c) {
@@ -110,10 +115,14 @@
     }
     try {
       if (T.event && typeof T.event.listen === 'function') {
-        await T.event.listen('calendar-updated', async function () {
+        await T.event.listen('calendar-updated', async function (event) {
           try {
-            var s = await T.core.invoke('get_state');
-            applyState(s);
+            if (event && event.payload) {
+              applyState(event.payload);
+            } else {
+              var s = await T.core.invoke('get_state');
+              applyState(s);
+            }
           } catch (e) { /* 下次事件再试 */ }
         });
       }
@@ -199,23 +208,6 @@
     var md = String(parts[1]).padStart(2, '0') + '-' + String(parts[2]).padStart(2, '0');
     var suffix = idx === 0 ? ' · 今天' : (idx === 1 ? ' · 明天' : '');
     return '星期' + WEEKDAYS[d.getDay()] + ' ' + md + suffix;
-  }
-
-  /* 每日格言：按年积日轮换，零维护 */
-  var QUOTES = [
-    '以时间换空间，守拙出奇。',
-    '截断亏损，让利润奔跑。',
-    '计划你的交易，交易你的计划。',
-    '市场永远是对的，错的总是自己。',
-    '耐心是交易者最稀缺的筹码。',
-    '先求不败，再求胜。',
-    '风控第一，盈利自来。'
-  ];
-  function dayQuote() {
-    var now = new Date();
-    var start = new Date(now.getFullYear(), 0, 0);
-    var doy = Math.floor((now - start) / 86400000);
-    return QUOTES[doy % QUOTES.length];
   }
 
   function timeHM(iso) {
@@ -338,7 +330,6 @@
 
     document.getElementById('groups').innerHTML = html;
     document.getElementById('empty').hidden = list.length > 0;
-    document.getElementById('p-quote').textContent = '每日格言：' + dayQuote();
     fitFont();
     /* 触底仍溢出：页脚如实提示（极端忙周） */
     var note = document.querySelector('.p-foot .p-note');
