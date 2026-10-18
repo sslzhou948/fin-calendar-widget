@@ -47,7 +47,8 @@ pub fn needs_refresh(covered: (i32, u32), now: DateTime<Tz>) -> bool {
 /// 事件驱动唤醒时间表：`[(唤醒时间, 事件 id)]`。
 ///
 /// 唤醒时间 = `release_at + 2min`（给接口留出数据更新时间）；
-/// 只取唤醒时间晚于 `now` 的未来事件，按时间升序。pub fn build_wake_list(events: &[CalendarEvent], now: DateTime<Tz>) -> Vec<(DateTime<Tz>, String)> {
+/// 只取唤醒时间晚于 `now` 的未来事件，按时间升序。
+pub fn build_wake_list(events: &[CalendarEvent], now: DateTime<Tz>) -> Vec<(DateTime<Tz>, String)> {
     let mut list: Vec<(DateTime<Tz>, String)> = events
         .iter()
         .map(|e| (e.release_at + Duration::minutes(2), e.id.clone()))
