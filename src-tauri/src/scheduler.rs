@@ -45,7 +45,18 @@ pub fn spawn(app: AppHandle, wake_rx: tokio::sync::mpsc::Receiver<()>) {
             tokio::time::sleep(wait).await;
             let outcome = full_refresh(&app2).await;
             if outcome.from_cache {
-                eprintln!("[scheduler] 全量刷新失败，已保留本地缓存");
+                // 有界重试：失败后每小时重抓，最多 3 次；仍失败则等下周日。
+                // （"周日关机错过"由开机对账覆盖；这里防"开着机但那一刻网络抖动"）
+                for i in 1..=3u32 {
+                    tokio::time::sleep(Duration::from_secs(3600)).await;
+                    eprintln!("[scheduler] 全量刷新重试 {i}/3");
+                    if !full_refresh(&app2).await.from_cache {
+                        break;
+                    }
+                    if i == 3 {
+                        eprintln!("[scheduler] 重试 3 次仍失败，等下周日");
+                    }
+                }
             }
         }
     });
