@@ -19,7 +19,7 @@
  *    - usd_sentiment 仅在 config.usd_mode=true（美元口径着色）时由前端使用。
  *    - 所有字段缺失时前端必须容忍，不得崩溃。
  *  Config: { countries:[..], min_stars, side('left'|'right'),
- *            font_size(12-18), frosted(bool), notify(bool), source('auto'|'primary'|'backup'),
+ *            font_size(12-18), frosted(bool), notifications(bool), source('auto'|'primary'|'backup'),
  *            usd_mode(bool), notify_events(bool), hide_holidays(bool) }
  */
 (function () {
@@ -31,14 +31,14 @@
     side: 'right',
     font_size: 14,
     frosted: true,
-    notify: true,
+    notifications: true,
     source: 'auto',
     usd_mode: false,       // 美元口径：按 usd_sentiment(bull=红/bear=绿) 给实际值着色
     notify_events: false,   // 事件类（讲话/纪要）也发系统通知
     hide_holidays: false    // 隐藏假期行
   };
 
-  var MIN_FS = 10;
+  var MIN_FS = 9;   /* 方案A floor：再小中文即不可读 */
   var NEAR_MS = 6 * 3600 * 1000;   // 距公布 <6 小时高亮
   var WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -179,8 +179,25 @@
     var parts = key.split('-').map(Number);
     var d = new Date(parts[0], parts[1] - 1, parts[2]);
     var md = String(parts[1]).padStart(2, '0') + '-' + String(parts[2]).padStart(2, '0');
-    var prefix = idx === 0 ? '今天 · ' : (idx === 1 ? '明天 · ' : '');
-    return prefix + md + ' 星期' + WEEKDAYS[d.getDay()];
+    var suffix = idx === 0 ? ' · 今天' : (idx === 1 ? ' · 明天' : '');
+    return '星期' + WEEKDAYS[d.getDay()] + ' ' + md + suffix;
+  }
+
+  /* 每日格言：按年积日轮换，零维护 */
+  var QUOTES = [
+    '以时间换空间，守拙出奇。',
+    '截断亏损，让利润奔跑。',
+    '计划你的交易，交易你的计划。',
+    '市场永远是对的，错的总是自己。',
+    '耐心是交易者最稀缺的筹码。',
+    '先求不败，再求胜。',
+    '风控第一，盈利自来。'
+  ];
+  function dayQuote() {
+    var now = new Date();
+    var start = new Date(now.getFullYear(), 0, 0);
+    var doy = Math.floor((now - start) / 86400000);
+    return QUOTES[doy % QUOTES.length];
   }
 
   function timeHM(iso) {
@@ -201,13 +218,6 @@
       '<span class="off">' + '☆'.repeat(5 - n) + '</span></span>';
   }
 
-  function valCell(label, value, isActual, extraCls) {
-    var v = (value == null || value === '') ? '<span class="v na">—</span>'
-      : '<span class="v' + (extraCls ? ' ' + extraCls : '') + '">' + escapeHtml(value) + '</span>';
-    return '<div class="val' + (isActual ? ' actual' : '') + '">' +
-             '<span class="k">' + label + '</span>' + v + '</div>';
-  }
-
   function titleHtml(e) {
     return '<span class="title" title="' + escapeHtml(e.title) + '">' +
       escapeHtml(e.title) + '</span>';
@@ -225,17 +235,26 @@
     return '';
   }
 
+  /* data 行：v4 紧凑两段式 —— 时间+国旗+全名+星级 / 预期·前值·实际
+   * （原型的三段式在忙周放不下一周，合并首行以满足方案A"一周全览"） */
   function renderDataRow(e, near) {
     return '<div class="ev' + (near ? ' near' : '') + '">' +
-      '<span class="time">' + timeLabel(e) + '</span>' +
-      flagHtml(e) +
-      titleHtml(e) +
-      stars(e.importance) +
-      '<span class="vals">' +
-        valCell('预期', e.forecast, false) +
-        valCell('前值', e.previous, false) +
-        valCell('实际', e.actual, true, actualColorCls(e)) +
-      '</span>' +
+      '<div class="ev-line1"><span class="time">' + timeLabel(e) + '</span>' +
+        flagHtml(e) + titleHtml(e) + stars(e.importance) + '</div>' +
+      valsHtml(e) +
+    '</div>';
+  }
+
+  /* 预期 / 前值 / 实际单行；实际值按中性口径（或美元口径）着色 */
+  function valsHtml(e) {
+    function v(x) { return (x == null || x === '') ? '—' : escapeHtml(x); }
+    var ac = actualColorCls(e);
+    return '<div class="vals">' +
+      '<span class="k">预期</span><b>' + v(e.forecast) + '</b>' +
+      '<span class="sep">·</span>' +
+      '<span class="k">前值</span><b>' + v(e.previous) + '</b>' +
+      '<span class="sep">·</span>' +
+      '<span class="k">实际</span><b' + (ac ? ' class="' + ac + '"' : '') + '>' + v(e.actual) + '</b>' +
     '</div>';
   }
 
@@ -243,19 +262,14 @@
     var badge = (e.status != null && e.status !== '')
       ? '<span class="status">' + escapeHtml(e.status) + '</span>' : '';
     return '<div class="ev ev-event' + (near ? ' near' : '') + '">' +
-      '<span class="time">' + timeLabel(e) + '</span>' +
-      flagHtml(e) +
-      titleHtml(e) +
-      stars(e.importance) +
-      badge +
+      '<div class="ev-line1"><span class="time">' + timeLabel(e) + '</span>' +
+        flagHtml(e) + titleHtml(e) + stars(e.importance) + badge + '</div>' +
     '</div>';
   }
 
   function renderHolidayRow(e) {
     return '<div class="ev ev-holiday">' +
-      '<span class="time">' + timeLabel(e) + '</span>' +
-      flagHtml(e, false) +
-      titleHtml(e) +
+      '<div class="ev-line1">' + flagHtml(e, false) + titleHtml(e) + '</div>' +
     '</div>';
   }
 
@@ -306,21 +320,32 @@
 
     document.getElementById('groups').innerHTML = html;
     document.getElementById('empty').hidden = list.length > 0;
+    document.getElementById('p-quote').textContent = '每日格言：' + dayQuote();
     fitFont();
+    /* 触底仍溢出：页脚如实提示（极端忙周） */
+    var note = document.querySelector('.p-foot .p-note');
+    if (note) {
+      note.textContent = '事件驱动刷新 · 每周日 00:00(北京时间)全量更新 · 开机自动对账' +
+        (document.getElementById('groups').dataset.overflow ? '（本周事件较多，已压缩至最小字号）' : '');
+    }
   }
 
-  /* 字号自适应：#panel 内容溢出则逐级缩小 --fs（步长 1px，最小 10px）直到放下 */
+  /* 字号自适应（方案A）：#groups 内容溢出则逐级缩小 --fs（步长 1px，最小 10px）直到放下。
+   * 注意：必须量 #groups（flex:1 的裁剪容器）而非 #panel——panel 自身被 max-height
+   * 封顶，scrollHeight 恒等于 clientHeight，量它永远测不出溢出。 */
   function fitFont() {
-    var panel = document.getElementById('panel');
+    var groups = document.getElementById('groups');
     var fs = clampInt(config.font_size, 12, 18, 14);
     var root = document.documentElement;
     root.style.setProperty('--fs', fs + 'px');
     var guard = 0;
-    while (panel.scrollHeight > panel.clientHeight && fs > MIN_FS && guard < 20) {
+    while (groups.scrollHeight > groups.clientHeight && fs > MIN_FS && guard < 24) {
       fs -= 1;
       root.style.setProperty('--fs', fs + 'px');
       guard++;
     }
+    /* 触底仍溢出：如实记录（调用方可据此提示"还有 N 条未显示"） */
+    groups.dataset.overflow = groups.scrollHeight > groups.clientHeight ? '1' : '';
   }
 
   /* ---------- 启动 ---------- */
