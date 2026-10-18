@@ -20,7 +20,7 @@
     side: 'right',
     font_size: 14,
     frosted: true,
-    notify: true,
+    notifications: true,
     source: 'auto',
     usd_mode: false,
     notify_events: false,
@@ -71,7 +71,7 @@
       side: sideEl ? sideEl.value : 'right',
       font_size: parseInt(el('fontSize').value, 10),
       frosted: el('frosted').checked,
-      notify: el('notify').checked,
+      notifications: el('notify').checked,
       usd_mode: el('usdMode').checked,
       notify_events: el('notifyEvents').checked,
       hide_holidays: el('hideHolidays').checked,
@@ -91,7 +91,7 @@
     el('fontSize').value = String(c.font_size);
     el('fontSizeVal').textContent = c.font_size + ' px';
     el('frosted').checked = !!c.frosted;
-    el('notify').checked = !!c.notify;
+    el('notify').checked = !!c.notifications;
     el('usdMode').checked = !!c.usd_mode;
     el('notifyEvents').checked = !!c.notify_events;
     el('hideHolidays').checked = !!c.hide_holidays;
