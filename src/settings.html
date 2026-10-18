@@ -48,6 +48,12 @@
       <label class="item"><input type="checkbox" id="frosted" checked> 毛玻璃面板（默认开）</label>
     </div>
     <div class="s-row">
+      <label class="lbl">背景不透明度</label>
+      <input type="range" id="frostOpacity" min="0" max="100" value="70" class="slider">
+      <span class="val" id="frostOpacityVal">70%</span>
+      <div class="hint">数值越高背景越实，文字越清晰（默认 70%）</div>
+    </div>
+    <div class="s-row">
       <label class="item"><input type="checkbox" id="notify" checked> 数据公布系统通知（默认开）</label>
     </div>
     <div class="s-row">
@@ -73,23 +79,23 @@
     <h2>颜色自定义</h2>
     <div class="s-row">
       <span class="name">时间</span>
-      <input type="color" id="cTime" value="#f0a832">
+      <input type="color" id="cTime" data-color-key="time" value="#f0a832">
       <span class="name">星级</span>
-      <input type="color" id="cStars" value="#ffd166">
+      <input type="color" id="cStars" data-color-key="stars" value="#ffd166">
     </div>
     <div class="s-row">
       <span class="name">超预期</span>
-      <input type="color" id="cBeat" value="#4ade80">
+      <input type="color" id="cBeat" data-color-key="beat" value="#4ade80">
       <span class="name">低预期</span>
-      <input type="color" id="cMiss" value="#f87171">
+      <input type="color" id="cMiss" data-color-key="miss" value="#f87171">
       <span class="name">符合预期</span>
-      <input type="color" id="cInline" value="#9ca3af">
+      <input type="color" id="cInline" data-color-key="inline" value="#9ca3af">
     </div>
     <div class="s-row">
       <span class="name">正文</span>
-      <input type="color" id="cText" value="#eceff4">
+      <input type="color" id="cText" data-color-key="text" value="#eceff4">
       <span class="name">次要文字</span>
-      <input type="color" id="cMuted" value="#9aa4b5">
+      <input type="color" id="cMuted" data-color-key="muted" value="#9aa4b5">
     </div>
     <div class="s-row">
       <button class="btn" id="resetColorsBtn">恢复默认颜色</button>
