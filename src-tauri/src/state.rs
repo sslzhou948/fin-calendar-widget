@@ -50,6 +50,9 @@ fn default_importance_map() -> HashMap<u8, u8> {
 fn default_panel_width_pct() -> u8 {
     42
 }
+fn default_frost_opacity() -> u8 {
+    70
+}
 // 颜色主题默认值（与 styles.css :root 保持一致）
 fn c_time() -> String { "#f0a832".to_string() }
 fn c_stars() -> String { "#ffd166".to_string() }
@@ -146,6 +149,9 @@ pub struct Config {
     /// 面板宽度占屏幕宽度的百分比，25–75，默认 42（设置页滑杆可调）
     #[serde(default = "default_panel_width_pct")]
     pub panel_width_pct: u8,
+    /// 毛玻璃背景不透明度 0–100，默认 70（设置页滑杆可调）
+    #[serde(default = "default_frost_opacity")]
+    pub frost_opacity: u8,
     /// 颜色主题（元素颜色自定义）
     #[serde(default)]
     pub colors: ColorTheme,
@@ -166,6 +172,7 @@ impl Default for Config {
             notify_events: default_false(),
             hide_holidays: default_false(),
             panel_width_pct: default_panel_width_pct(),
+            frost_opacity: default_frost_opacity(),
             colors: ColorTheme::default(),
         }
     }
@@ -190,6 +197,9 @@ impl Config {
         }
         if !(25..=75).contains(&self.panel_width_pct) {
             return Err("panel_width_pct 必须在 25–75 之间".to_string());
+        }
+        if self.frost_opacity > 100 {
+            return Err("frost_opacity 必须在 0–100 之间".to_string());
         }
         self.colors.validate()?;
         Ok(())
