@@ -4,7 +4,7 @@
 //! 数据获取 / 解析 / 映射 / 调度纯函数全部在 `caldata` crate，本壳只做编排。
 //!
 //! 调用的 caldata 公开 API（`crates/caldata/src/lib.rs` 有再导出）：
-//! - `caldata::investing_primary::InvestingPrimary::new()` / `.with_importance()`
+//! - `caldata::faireconomy::Faireconomy::new()`
 //! - `caldata::investing_backup::InvestingBackup::new()` / `.with_importance()`
 //! - `caldata::source::{DataSource::fetch_week, fetch_week_with_fallback,
 //!   SourceMode, FetchOutcome, SourceError}`
@@ -20,8 +20,8 @@ mod state;
 
 use std::time::Duration;
 
+use caldata::faireconomy::Faireconomy;
 use caldata::investing_backup::InvestingBackup;
-use caldata::investing_primary::InvestingPrimary;
 use caldata::model::Source;
 use caldata::schedule::{self, TZ};
 use caldata::source::{DataSource, FetchOutcome, SourceError};
@@ -63,6 +63,16 @@ pub fn run() {
             app.manage(state);
 
             position_main_window(app.handle());
+
+            // 主窗口获得焦点时重新压到底（防浮到应用窗口之上）
+            if let Some(win) = app.get_webview_window("main") {
+                let win_clone = win.clone();
+                win.on_window_event(move |ev| {
+                    if matches!(ev, tauri::WindowEvent::Focused(true)) {
+                        pin_to_bottom(&win_clone);
+                    }
+                });
+            }
 
             // 开机自启（best-effort，失败只打日志不阻断启动）
             {
@@ -119,9 +129,37 @@ fn position_main_window(app: &AppHandle) {
     if let Err(e) = win.set_ignore_cursor_events(true) {
         eprintln!("[window] 点击穿透开启失败: {e}");
     }
-    // 注：alwaysOnTop=false 即普通窗口层级；Tauri 未暴露 lower()，
-    // "图标层之下"列为 v2 调研项（§5），v1 不做。
+    // Windows：钉在 Z 序最底层（壁纸层），防止浮到应用窗口之上
+    pin_to_bottom(&win);
 }
+
+/// Windows：`SetWindowPos(HWND_BOTTOM)` 把窗口压到 Z 序最底。
+/// 获得焦点时由 `on_window_event(Focused)` 重新压底（见 setup 中的监听）。
+#[cfg(target_os = "windows")]
+fn pin_to_bottom(win: &tauri::WebviewWindow) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        HWND_BOTTOM, SET_WINDOW_POS_FLAGS, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
+    };
+    match win.hwnd() {
+        Ok(raw) => unsafe {
+            let _ = SetWindowPos(
+                HWND(raw as *mut _),
+                HWND_BOTTOM,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+        },
+        Err(e) => eprintln!("[window] 获取 HWND 失败: {e}"),
+    }
+}
+
+/// 非 Windows：空实现，保持跨平台编译。
+#[cfg(not(target_os = "windows"))]
+fn pin_to_bottom(_win: &tauri::WebviewWindow) {}
 
 /// 托盘：打开设置 / 立即刷新 / 退出
 fn build_tray(app: &AppHandle) {
@@ -229,7 +267,7 @@ async fn test_sources() -> Result<Vec<SourceTestResult>, String> {
     let candidates: Vec<(&str, Result<Box<dyn DataSource>, SourceError>)> = vec![
         (
             "primary",
-            InvestingPrimary::new().map(|s| Box::new(s) as Box<dyn DataSource>),
+            Faireconomy::new().map(|s| Box::new(s) as Box<dyn DataSource>),
         ),
         (
             "backup",
