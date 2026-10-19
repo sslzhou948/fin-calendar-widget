@@ -37,3 +37,5 @@ custom-protocol = [ "tauri/custom-protocol" ]
 # Windows 置底（HWND_BOTTOM）所需的 Win32 API
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+# raw-window-handle：版本无关地取窗口原始句柄（避开 windows crate 多版本 HWND 类型冲突）
+raw-window-handle = "0.6"
