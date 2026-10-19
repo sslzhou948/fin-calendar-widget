@@ -110,6 +110,8 @@ body.no-frosted #panel {
   border: 1px solid transparent;
   border-bottom: 1px solid var(--row-border);
   border-radius: 8px;
+  /* 分列时整个事件不被拦腰截断，放不下自动流到下一列（2026-10-19） */
+  break-inside: avoid;
 }
 .ev:last-child { border-bottom-color: transparent; }
 
