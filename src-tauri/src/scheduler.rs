@@ -65,11 +65,12 @@ pub fn spawn(app: AppHandle, wake_rx: tokio::sync::mpsc::Receiver<()>) {
     let app3 = app.clone();
     tauri::async_runtime::spawn(wake_loop(app3, wake_rx));
 
-    // ④ 兜底扫尾：每 15 分钟重试仍缺 actual 的数据行
+    // ④ 事件驱动 actual 回填：每 5 分钟轻量检查（本地，无网络），
+    // 有待回填事件时才抓一次 FF 页面（2026-10-19 重构，防接口屏蔽）
     let app4 = app.clone();
     tauri::async_runtime::spawn(async move {
         loop {
-            tokio::time::sleep(Duration::from_secs(15 * 60)).await;
+            tokio::time::sleep(Duration::from_secs(5 * 60)).await;
             sweep_stale_actuals(&app4).await;
         }
     });
@@ -266,40 +267,121 @@ async fn fire_due(app: &AppHandle, wakes: &mut Vec<(DateTime<Tz>, String)>) {
     emit_updated(app);
 }
 
-/// 兜底扫尾：已过发布时间（2 分钟前）但 actual 仍为空的数据行，重试拉取。
-/// 覆盖 fire_due 那次拉取失败，或数据源公布延迟（+2min 时还没出数）两种缺口。
-/// 候选周由 `schedule::stale_weeks` 纯函数算出（48 小时前的陈旧事件不再扫）。
+/// 事件驱动 actual 回填（2026-10-19 重构）：替代无脑 15 分钟全量扫。
+///
+/// 触发条件（同时满足才抓一次 FF 页面，批量回填）：
+/// - 数据行（有 forecast/previous 任一）且 actual 为空
+/// - now >= event_time + 10min（给发布方和 FF 留出更新时间，避开大事件流量高峰）
+/// - now <= event_time + 4h（太久远的不追，每周日全量刷新兜底）
+/// - 上次尝试在 30 分钟前（FF 故障时退避，不 hammer）
+///
+/// 检查间隔 5 分钟（本地轻量，无网络）；有符合条件事件时才产生 1 次 FF 请求。
+/// 相比旧逻辑（每 15 分钟全周重抓，~672 次/周），新逻辑约 20-40 次/周。
 async fn sweep_stale_actuals(app: &AppHandle) {
+    use chrono::Duration;
+
     let state = app.state::<AppState>();
     let now = now_sh();
 
-    let weeks: Vec<NaiveDate> = {
+    // 退避：上次尝试 30 分钟内，跳过
+    if let Some(last) = state.last_actuals_sweep() {
+        if now.signed_duration_since(last) < Duration::minutes(30) {
+            return;
+        }
+    }
+
+    // 找待回填事件
+    let pending: Vec<(String, String, String)> = {
         let cache = state.cache_snapshot();
-        schedule::stale_weeks(&cache.events, now)
+        cache
+            .events
+            .iter()
+            .filter(|e| {
+                // 数据行：任一数值非空
+                let is_data = e.forecast.is_some() || e.previous.is_some();
+                if !is_data || e.actual.is_some() {
+                    return false;
+                }
+                let elapsed = now.signed_duration_since(e.release_at);
+                // 已过发布时间 10 分钟，且在 4 小时内
+                elapsed >= Duration::minutes(10) && elapsed <= Duration::hours(4)
+            })
+            .map(|e| {
+                (
+                    e.title.clone(),
+                    format!("{:?}", e.country),
+                    e.release_at.format("%m-%d").to_string(),
+                )
+            })
+            .collect()
     };
-    if weeks.is_empty() {
+
+    if pending.is_empty() {
         return;
     }
-    eprintln!("[scheduler] 扫尾重试 {} 个周的 actual", weeks.len());
-    let cfg = state.config_snapshot();
-    let sources = state.sources();
-    for ws in weeks {
-        let outcome = fetch_week_with_fallback(
-            &sources.primary,
-            &sources.backup,
-            cfg.to_source_mode(),
-            ws,
-            None,
-        )
-        .await;
-        if outcome.from_cache {
-            state.set_last_error(Some(format_errors(&outcome)));
-            continue; // 下一轮 15 分钟后再试
+
+    eprintln!(
+        "[scheduler] 事件驱动回填：{} 个事件待更新，抓取 FF 页面",
+        pending.len()
+    );
+    state.set_last_actuals_sweep(now);
+
+    // 抓一次 FF 页面，批量回填
+    let client = match reqwest::Client::builder()
+        .user_agent(caldata::source::BROWSER_UA)
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[scheduler] Client 构建失败: {e}");
+            return;
         }
-        let newly = state.apply_actuals(&outcome.events);
-        if !newly.is_empty() {
-            crate::notifier::notify_new_actuals(app, &newly).await;
+    };
+
+    let actual_map = caldata::forexfactory_actuals::fetch_actual_map(&client).await;
+    if actual_map.is_empty() {
+        eprintln!("[scheduler] FF 抓取为空，30 分钟后重试");
+        return;
+    }
+
+    // 在缓存事件上回填
+    let filled_events: Vec<caldata::model::CalendarEvent> = {
+        let mut cache = state.cache_write();
+        let mut filled = vec![];
+        for ev in cache.events.iter_mut() {
+            if ev.actual.is_some() {
+                continue;
+            }
+            let is_data = ev.forecast.is_some() || ev.previous.is_some();
+            if !is_data {
+                continue;
+            }
+            let elapsed = now.signed_duration_since(ev.release_at);
+            if elapsed < Duration::minutes(10) || elapsed > Duration::hours(4) {
+                continue;
+            }
+            // 用 fill_actuals 的匹配逻辑（复用）
+            let mut single = vec![ev.clone()];
+            let n = caldata::forexfactory_actuals::fill_actuals(&mut single, &actual_map);
+            if n > 0 {
+                ev.actual = single[0].actual.clone();
+                // kind 重算（事件行→数据行）
+                ev.kind = caldata::mapping::classify_kind(
+                    &ev.title,
+                    ev.forecast.as_deref(),
+                    ev.previous.as_deref(),
+                    ev.actual.as_deref(),
+                );
+                filled.push(ev.clone());
+            }
         }
+        filled
+    };
+
+    if !filled_events.is_empty() {
+        eprintln!("[scheduler] 回填 {} 条实际值", filled_events.len());
+        crate::notifier::notify_new_actuals(app, &filled_events).await;
     }
     emit_updated(app);
 }
