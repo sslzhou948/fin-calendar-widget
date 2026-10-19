@@ -264,6 +264,8 @@ pub struct AppState {
     cache: RwLock<Cache>,
     sources: RwLock<Arc<Sources>>,
     rebuild_tx: tokio::sync::mpsc::Sender<()>,
+    /// 上次 actuals 扫尾尝试时间（用于失败退避，避免 FF 故障时 hammer）
+    last_actuals_sweep: RwLock<Option<DateTime<Tz>>>,
 }
 
 impl AppState {
@@ -280,9 +282,20 @@ impl AppState {
                 cache: RwLock::new(cache),
                 sources: RwLock::new(sources),
                 rebuild_tx: tx,
+                last_actuals_sweep: RwLock::new(None),
             },
             rx,
         ))
+    }
+
+    /// 记录 actuals 扫尾尝试时间
+    pub fn set_last_actuals_sweep(&self, t: DateTime<Tz>) {
+        *self.last_actuals_sweep.write().unwrap() = Some(t);
+    }
+
+    /// 上次 actuals 扫尾尝试时间
+    pub fn last_actuals_sweep(&self) -> Option<DateTime<Tz>> {
+        *self.last_actuals_sweep.read().unwrap()
     }
 
     pub fn config_snapshot(&self) -> Config {
@@ -291,6 +304,11 @@ impl AppState {
 
     pub fn cache_snapshot(&self) -> Cache {
         self.cache.read().unwrap().clone()
+    }
+
+    /// 可变访问缓存（事件驱动回填用）
+    pub fn cache_write(&self) -> std::sync::RwLockWriteGuard<'_, Cache> {
+        self.cache.write().unwrap()
     }
 
     /// 数据源实例（Arc 共享，调用方按需取引用）
