@@ -209,6 +209,49 @@
     }
   }
 
+  /* ---------- 实际值回填测试 ---------- */
+  async function runActualsTest() {
+    var btn = el('testActualsBtn');
+    var box = el('actualsResult');
+    btn.disabled = true;
+    btn.textContent = '测试中…';
+    box.innerHTML = '';
+    try {
+      if (!isTauri()) {
+        box.innerHTML = '<div class="t-card"><span class="fail">浏览器预览模式不支持，需在 Tauri 应用内运行。</span></div>';
+        return;
+      }
+      var r = await T.core.invoke('test_actuals');
+      var html = '<div class="t-card">' +
+        '<div><strong>实际值回填测试</strong>　' +
+        (r.filled > 0 ? '<span class="ok">✓ 正常</span>' : '<span class="fail">✗ 未回填</span>') + '</div>' +
+        '<div>Faireconomy 事件：' + r.fe_events + ' 条　' +
+        'ForexFactory 抓取：' + r.ff_rows + ' 行　' +
+        '回填成功：' + r.filled + ' 条</div>';
+      if (r.samples && r.samples.length) {
+        html += '<div style="margin-top:8px;font-size:12px;color:var(--muted)">样本：</div>';
+        r.samples.forEach(function (s) {
+          html += '<div style="font-size:12px;margin-top:4px">' +
+            escapeHtml(s.title) + ' (' + escapeHtml(s.country) + ')<br>' +
+            '预期 ' + escapeHtml(String(s.forecast || '—')) +
+            '　前值 ' + escapeHtml(String(s.previous || '—')) +
+            '　<span class="ok">实际 ' + escapeHtml(String(s.actual || '—')) + '</span></div>';
+        });
+      } else {
+        html += '<div class="note">暂无已公布事件（本周事件均未到发布时间，或抓取失败）。</div>';
+      }
+      html += '</div>';
+      box.innerHTML = html;
+    } catch (e) {
+      box.innerHTML =
+        '<div class="t-card"><span class="fail">测试调用失败：' +
+        escapeHtml(String(e && e.message || e)) + '</span></div>';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '实际值回填测试';
+    }
+  }
+
   /* ---------- 启动 ---------- */
 
   function init() {
@@ -234,6 +277,7 @@
     });
 
     el('testBtn').addEventListener('click', runTest);
+    el('testActualsBtn').addEventListener('click', runActualsTest);
 
     /* 样式类控件：防抖自动保存，主窗口经 calendar-updated 即时重渲染 */
     var liveTimer = null;
