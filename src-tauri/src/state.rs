@@ -2,15 +2,15 @@
 //!
 //! - 配置：`app_data_dir/config.json`（TECH-DESIGN §8）
 //! - 缓存：`app_data_dir/cache.json`（covered_week、事件、已通知 id 集合，§4.2 对账依据）
-//! - 数据源：`InvestingPrimary` / `InvestingBackup` 实例各持一份（复用 reqwest Client），
+//! - 数据源：`Faireconomy` / `InvestingBackup` 实例各持一份（复用 reqwest Client），
 //!   配置变更（importance_map）时重建。
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
+use caldata::faireconomy::Faireconomy;
 use caldata::investing_backup::InvestingBackup;
-use caldata::investing_primary::InvestingPrimary;
 use caldata::mapping::ImportanceMap;
 use caldata::model::CalendarEvent;
 use caldata::source::{SourceError, SourceMode};
@@ -242,15 +242,16 @@ pub struct Cache {
 }
 
 /// 两路数据源实例（复用内部 reqwest Client）
+/// primary = Faireconomy（公开 JSON，免反爬）；backup = Investing 社区接口。
 pub struct Sources {
-    pub primary: InvestingPrimary,
+    pub primary: Faireconomy,
     pub backup: InvestingBackup,
 }
 
 impl Sources {
     pub fn build(importance: &ImportanceMap) -> Result<Self, SourceError> {
         Ok(Self {
-            primary: InvestingPrimary::new()?.with_importance(*importance),
+            primary: Faireconomy::new()?,
             backup: InvestingBackup::new()?.with_importance(*importance),
         })
     }
