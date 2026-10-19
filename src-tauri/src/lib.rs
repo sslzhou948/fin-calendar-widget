@@ -91,6 +91,7 @@ pub fn run() {
             get_config,
             set_config,
             test_sources,
+            test_actuals,
             refresh_now
         ])
         .run(tauri::generate_context!())
@@ -329,6 +330,59 @@ async fn test_sources() -> Result<Vec<SourceTestResult>, String> {
         }
     }
     Ok(out)
+}
+
+/// 实际值回填测试（设置页"实际值回填测试"按钮调用，2026-10-19）
+/// 返回：Faireconomy 事件数、FF 抓取行数、匹配回填数、样本（最多 5 条）
+#[tauri::command]
+async fn test_actuals() -> Result<serde_json::Value, String> {
+    use caldata::forexfactory_actuals::{fetch_actual_map, fill_actuals};
+    use caldata::source::BROWSER_UA;
+
+    let client = reqwest::Client::builder()
+        .user_agent(BROWSER_UA)
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Client 构建失败: {e}"))?;
+
+    // 1. 取 Faireconomy
+    let fe = caldata::faireconomy::Faireconomy::new().map_err(|e| e.to_string())?;
+    let week_start = caldata::schedule::week_monday(caldata::schedule::now_sh().date_naive());
+    let mut events = fe
+        .fetch_week(week_start)
+        .await
+        .map_err(|e| format!("Faireconomy 失败: {e}"))?;
+    let fe_count = events.len();
+
+    // 2. 取 FF actual map
+    let actual_map = fetch_actual_map(&client).await;
+    let ff_rows = actual_map.len();
+
+    // 3. 回填（在副本上做，不污染缓存）
+    let filled = fill_actuals(&mut events, &actual_map);
+
+    // 4. 取样本：前 5 条有 actual 的
+    let samples: Vec<serde_json::Value> = events
+        .iter()
+        .filter(|e| e.actual.is_some())
+        .take(5)
+        .map(|e| {
+            serde_json::json!({
+                "title": e.title,
+                "country": format!("{:?}", e.country),
+                "forecast": e.forecast,
+                "previous": e.previous,
+                "actual": e.actual,
+            })
+        })
+        .collect();
+
+    Ok(serde_json::json!({
+        "fe_events": fe_count,
+        "ff_rows": ff_rows,
+        "filled": filled,
+        "samples": samples,
+    }))
 }
 
 /// 立即全量刷新（托盘 / 设置页调用）
