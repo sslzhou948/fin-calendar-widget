@@ -292,7 +292,9 @@
 
   function titleHtml(e) {
     var cn = titleCn(e.title);
-    var disp = cn !== e.title ? cn + ' <span style="opacity:.55">(' + escapeHtml(e.title) + ')</span>' : escapeHtml(e.title);
+    var disp = cn !== e.title
+      ? escapeHtml(cn) + ' <span style="opacity:.55">(' + escapeHtml(e.title) + ')</span>'
+      : escapeHtml(e.title);
     return '<span class="title" title="' + escapeHtml(e.title) + '">' + disp + '</span>';
   }
 
