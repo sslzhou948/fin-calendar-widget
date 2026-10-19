@@ -50,6 +50,59 @@
   var NEAR_MS = 6 * 3600 * 1000;   // 距公布 <6 小时高亮
   var WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
+  /* 英文标题 → 中文映射（2026-10-19 用户需求：Faireconomy 源只有英文标题）
+   * 覆盖常见经济指标；未命中则保留英文原文 */
+  var TITLE_CN = {
+    'CPI m/m': 'CPI月率', 'CPI y/y': 'CPI年率', 'Core CPI m/m': '核心CPI月率',
+    'Core CPI y/y': '核心CPI年率', 'Median CPI y/y': 'CPI中位数年率',
+    'Trimmed CPI y/y': 'CPI截尾年率', 'Common CPI y/y': 'CPI共同年率',
+    'PPI m/m': 'PPI月率', 'PPI y/y': 'PPI年率', 'PPI Input m/m': 'PPI投入月率',
+    'PPI Output m/m': 'PPI产出月率', 'Core PPI m/m': '核心PPI月率',
+    'GDP q/q': 'GDP季率', 'GDP y/y': 'GDP年率', 'GDP q/y': 'GDP年率',
+    'Unemployment Rate': '失业率', 'Unemployment Claims': '初请失业金人数',
+    'Non-Farm Employment Change': '非农就业人数', 'ADP Non-Farm Employment Change': 'ADP就业人数',
+    'Average Hourly Earnings m/m': '平均时薪月率', 'Employment Change': '就业人数变化',
+    'Retail Sales m/m': '零售销售月率', 'Retail Sales y/y': '零售销售年率',
+    'Core Retail Sales m/m': '核心零售销售月率',
+    'Industrial Production m/m': '工业产出月率', 'Industrial Production y/y': '工业产出年率',
+    'Manufacturing PMI': '制造业PMI', 'Services PMI': '服务业PMI',
+    'Flash Manufacturing PMI': '制造业PMI初值', 'Flash Services PMI': '服务业PMI初值',
+    'Trade Balance': '贸易帐', 'Current Account': '经常帐',
+    'Interest Rate Decision': '利率决议', 'Official Bank Rate': '官方利率',
+    'Federal Funds Rate': '联邦基金利率', 'Overnight Rate': '隔夜利率',
+    '1-y Loan Prime Rate': '1年期LPR', '5-y Loan Prime Rate': '5年期LPR',
+    'New Home Prices m/m': '新房价格月率', 'Fixed Asset Investment ytd/y': '固定资产投资',
+    'NBS Press Conference': '统计局新闻发布会', 'Foreign Direct Investment ytd/y': '实际使用外资',
+    'NAHB Housing Market Index': 'NAHB房市指数', 'Building Permits': '营建许可',
+    'Housing Starts': '新屋开工', 'Pending Home Sales m/m': '成屋签约销售月率',
+    'Existing Home Sales': '成屋销售', 'New Home Sales': '新屋销售',
+    'Crude Oil Inventories': '原油库存', 'Natural Gas Storage': '天然气库存',
+    'Consumer Confidence': '消费者信心指数', 'GfK Consumer Confidence': 'GfK消费者信心',
+    'UoM Consumer Sentiment': '密大消费者信心', 'Revised UoM Consumer Sentiment': '密大消费者信心修正值',
+    'Revised UoM Inflation Expectations': '密大通胀预期修正值',
+    'Durable Goods Orders m/m': '耐用品订单月率', 'Core Durable Goods Orders m/m': '核心耐用品订单月率',
+    'CB Leading Index m/m': '谘商会领先指标月率', 'CB Consumer Confidence': '谘商会消费者信心',
+    'ISM Manufacturing PMI': 'ISM制造业PMI', 'ISM Services PMI': 'ISM服务业PMI',
+    'JOLTS Job Openings': 'JOLTS职位空缺', 'Challenger Job Cuts y/y': '挑战者裁员年率',
+    'Prelim GDP q/q': 'GDP初值季率', 'Advance GDP q/q': 'GDP预估季率', 'Final GDP q/q': 'GDP终值季率',
+    'Prelim GDP Price Index q/q': 'GDP物价指数初值', 'Core PCE Price Index m/m': '核心PCE物价指数月率',
+    'PCE Price Index m/m': 'PCE物价指数月率', 'PCE Price Index y/y': 'PCE物价指数年率',
+    'Personal Income m/m': '个人收入月率', 'Personal Spending m/m': '个人支出月率',
+    'Philadelphia Fed Manufacturing Index': '费城联储制造业指数',
+    'Empire State Manufacturing Index': '纽约联储制造业指数',
+    'Import Prices m/m': '进口物价月率', 'Export Prices m/m': '出口物价月率',
+    'Treasury Currency Report': '财政部汇率报告', 'Beige Book': '褐皮书',
+    'FOMC Statement': 'FOMC声明', 'FOMC Press Conference': 'FOMC新闻发布会',
+    'FOMC Meeting Minutes': 'FOMC会议纪要', 'Fed Chair Powell Speaks': '鲍威尔讲话',
+    'BOE Gov Bailey Speaks': '贝利讲话', 'ECB President Lagarde Speaks': '拉加德讲话',
+    'BOJ Gov Ueda Speaks': '植田讲话', 'RBA Gov Bullock Speaks': '布洛克讲话',
+    'Daylight Saving Time Shift': '夏令时切换', 'Bank Holiday': '银行假日'
+  };
+
+  function titleCn(en) {
+    return TITLE_CN[en] || en;
+  }
+
   var config = Object.assign({}, DEFAULT_CONFIG);
   var events = [];
 
@@ -201,12 +254,21 @@
       String(d.getDate()).padStart(2, '0');
   }
 
-  function dayLabel(key, idx) {
+  function dayLabel(key) {
     if (key === 'undated') return '待公布时间';
     var parts = key.split('-').map(Number);
     var d = new Date(parts[0], parts[1] - 1, parts[2]);
     var md = String(parts[1]).padStart(2, '0') + '-' + String(parts[2]).padStart(2, '0');
-    var suffix = idx === 0 ? ' · 今天' : (idx === 1 ? ' · 明天' : '');
+    /* 按真实日期对比标"今天/明天"，不用分组序号（2026-10-19 修：数据源含过去日期时序号错位） */
+    var today = new Date();
+    function kOf(dt) {
+      return dt.getFullYear() + '-' +
+        String(dt.getMonth() + 1).padStart(2, '0') + '-' +
+        String(dt.getDate()).padStart(2, '0');
+    }
+    var tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    var suffix = key === kOf(today) ? ' · 今天' : (key === kOf(tomorrow) ? ' · 明天' : '');
     return '星期' + WEEKDAYS[d.getDay()] + ' ' + md + suffix;
   }
 
@@ -229,8 +291,9 @@
   }
 
   function titleHtml(e) {
-    return '<span class="title" title="' + escapeHtml(e.title) + '">' +
-      escapeHtml(e.title) + '</span>';
+    var cn = titleCn(e.title);
+    var disp = cn !== e.title ? cn + ' <span style="opacity:.55">(' + escapeHtml(e.title) + ')</span>' : escapeHtml(e.title);
+    return '<span class="title" title="' + escapeHtml(e.title) + '">' + disp + '</span>';
   }
 
   /* data 行实际值着色类：中性口径（deviation）或美元口径（usd_sentiment） */
@@ -323,7 +386,7 @@
         return renderDataRow(e, near);
       }).join('');
       return '<section class="day-group">' +
-               '<div class="day-head">' + escapeHtml(dayLabel(k, gi)) + '</div>' +
+               '<div class="day-head">' + escapeHtml(dayLabel(k)) + '</div>' +
                rows +
              '</section>';
     }).join('');
