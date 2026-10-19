@@ -188,6 +188,23 @@
       '真实的接口测试需在 Tauri 应用内运行（调用后端 test_sources）。</div>';
   }
 
+  /* 测试按钮防抖：点击后禁用 60 秒，防止连点触发 429（2026-10-19） */
+  function cooldown(btn, origText, secs) {
+    btn.disabled = true;
+    var left = secs;
+    btn.textContent = origText + '（' + left + 's）';
+    var timer = setInterval(function () {
+      left--;
+      if (left <= 0) {
+        clearInterval(timer);
+        btn.disabled = false;
+        btn.textContent = origText;
+      } else {
+        btn.textContent = origText + '（' + left + 's）';
+      }
+    }, 1000);
+  }
+
   async function runTest() {
     var btn = el('testBtn');
     btn.disabled = true;
@@ -204,8 +221,7 @@
         '<div class="t-card"><span class="fail">测试调用失败：' +
         escapeHtml(String(e && e.message || e)) + '</span></div>';
     } finally {
-      btn.disabled = false;
-      btn.textContent = '接口测试';
+      cooldown(btn, '接口测试', 60);
     }
   }
 
@@ -247,8 +263,7 @@
         '<div class="t-card"><span class="fail">测试调用失败：' +
         escapeHtml(String(e && e.message || e)) + '</span></div>';
     } finally {
-      btn.disabled = false;
-      btn.textContent = '实际值回填测试';
+      cooldown(btn, '实际值回填测试', 60);
     }
   }
 
