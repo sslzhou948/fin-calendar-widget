@@ -141,7 +141,9 @@ body.no-frosted #panel {
   min-width: 0;
   font-size: .95em;
   line-height: 1.4;
-  /* 全名换行显示，不断截 */
+  /* 全名换行显示，不断截（2026-10-19 修：强制换行，杜绝截断） */
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* 预期 / 前值 / 实际单行 */
