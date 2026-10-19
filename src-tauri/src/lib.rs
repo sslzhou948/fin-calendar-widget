@@ -139,20 +139,23 @@ fn position_main_window(app: &AppHandle) {
 fn pin_to_bottom(win: &tauri::WebviewWindow) {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{
-        HWND_BOTTOM, SET_WINDOW_POS_FLAGS, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
+        HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
     };
     match win.hwnd() {
-        Ok(raw) => unsafe {
-            let _ = SetWindowPos(
-                HWND(raw as *mut _),
-                HWND_BOTTOM,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-            );
-        },
+        Ok(raw) => {
+            let hwnd = HWND(raw as *mut std::ffi::c_void);
+            unsafe {
+                let _ = SetWindowPos(
+                    hwnd,
+                    HWND_BOTTOM,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                );
+            }
+        }
         Err(e) => eprintln!("[window] 获取 HWND 失败: {e}"),
     }
 }
@@ -329,6 +332,7 @@ async fn refresh_now(app: AppHandle) -> Result<RefreshReport, String> {
         ok,
         events: outcome.events.len(),
         used: outcome.used.map(|s| match s {
+            Source::Faireconomy => "faireconomy".to_string(),
             Source::Primary => "primary".to_string(),
             Source::Backup => "backup".to_string(),
         }),
