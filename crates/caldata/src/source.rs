@@ -11,7 +11,7 @@ use std::sync::OnceLock;
 use crate::model::{CalendarEvent, Source};
 
 /// 浏览器 UA（两路请求共用，仿真真实浏览器，降低反爬概率）。
-pub(crate) const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
+pub const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
     AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 /// 全局复用 Client（避免每次回填新建连接池，2026-10-19 QA major）。
