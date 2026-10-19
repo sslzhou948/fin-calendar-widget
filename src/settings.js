@@ -157,12 +157,18 @@
     var html = results.map(function (r) {
       var cls = r.ok ? 'ok' : 'fail';
       var status = r.ok ? '✓ 连通' : '✗ 失败';
+      /* 备源 Investing 已知被 Cloudflare 拦截（2026-10-19 确认），失败属预期，标注清楚免误会 */
+      var note = '';
+      if (!r.ok && /investing/i.test(r.name)) {
+        note = '<div class="note">备源：已知被 Cloudflare 按机器人拦截（HTTP 403），属预期失败，不影响主源使用。</div>';
+      }
       return '<div class="t-card">' +
         '<div><strong>' + escapeHtml(r.name) + '</strong>　' +
         '<span class="' + cls + '">' + status + '</span></div>' +
         '<div>延迟：' + escapeHtml(String(r.latency_ms == null ? '—' : r.latency_ms + ' ms')) +
         '　解析行数：' + escapeHtml(String(r.rows == null ? '—' : r.rows)) + '</div>' +
         (r.error ? '<div class="fail">错误：' + escapeHtml(r.error) + '</div>' : '') +
+        note +
         '</div>';
     }).join('');
     box.innerHTML = html;
