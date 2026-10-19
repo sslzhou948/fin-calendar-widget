@@ -47,8 +47,7 @@ body.side-left { justify-content: flex-start; }
 
 /* ---------------- 挂件面板（v4：右半屏 / 按天分组 / 金十味） ---------------- */
 #panel {
-  width: auto;
-  max-width: 100%;
+  width: 100%;                              /* 撑满窗口宽，消除"窗体套面板"的双层感 */
   max-height: calc(100vh - 24px);
   overflow: hidden;
   display: flex;
