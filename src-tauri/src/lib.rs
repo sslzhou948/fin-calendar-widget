@@ -137,25 +137,23 @@ fn position_main_window(app: &AppHandle) {
 /// 获得焦点时由 `on_window_event(Focused)` 重新压底（见 setup 中的监听）。
 #[cfg(target_os = "windows")]
 fn pin_to_bottom(win: &tauri::WebviewWindow) {
-    use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{
         HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
     };
+    // 注：本工程 Tauri 版本的 win.hwnd() 直接返回 windows::Win32::Foundation::HWND，
+    // 无需再做 isize→指针转换（之前两次按 isize 写都错了，以编译器为准）。
     match win.hwnd() {
-        Ok(raw) => {
-            let hwnd = HWND(raw as *mut std::ffi::c_void);
-            unsafe {
-                let _ = SetWindowPos(
-                    hwnd,
-                    HWND_BOTTOM,
-                    0,
-                    0,
-                    0,
-                    0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-                );
-            }
-        }
+        Ok(hwnd) => unsafe {
+            let _ = SetWindowPos(
+                hwnd,
+                HWND_BOTTOM,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+        },
         Err(e) => eprintln!("[window] 获取 HWND 失败: {e}"),
     }
 }
