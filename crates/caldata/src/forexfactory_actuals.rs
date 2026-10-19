@@ -64,6 +64,18 @@ pub async fn fetch_actual_map(client: &Client) -> HashMap<ActualKey, String> {
     }
 }
 
+/// 测试用：自建 Client 抓取，返回 Result（2026-10-19，设置页测试按钮用）
+pub async fn fetch_actual_map_for_test() -> Result<HashMap<ActualKey, String>, String> {
+    let client = Client::builder()
+        .user_agent(crate::source::BROWSER_UA)
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Client 构建失败: {e}"))?;
+    fetch_inner(&client)
+        .await
+        .map_err(|e| format!("抓取失败: {e}"))
+}
+
 async fn fetch_inner(client: &Client) -> Result<HashMap<ActualKey, String>, SourceError> {
     let resp = client
         .get(FF_CALENDAR_URL)
