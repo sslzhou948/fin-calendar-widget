@@ -12,6 +12,7 @@
 //! - 重要性 3 档 → 5 星的默认映射 `{1:1, 2:3, 3:5}` 为初值，
 //!   须用一周真实数据校准（见 [`mapping::ImportanceMap`] 注释）。
 
+pub mod faireconomy;
 pub mod investing_backup;
 pub mod investing_primary;
 pub mod mapping;
