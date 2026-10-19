@@ -6,12 +6,26 @@
 use async_trait::async_trait;
 use chrono::NaiveDate;
 use std::fmt;
+use std::sync::OnceLock;
 
 use crate::model::{CalendarEvent, Source};
 
 /// 浏览器 UA（两路请求共用，仿真真实浏览器，降低反爬概率）。
 pub(crate) const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
     AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+/// 全局复用 Client（避免每次回填新建连接池，2026-10-19 QA major）。
+static SHARED_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+
+fn shared_client() -> &'static reqwest::Client {
+    SHARED_CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .user_agent(BROWSER_UA)
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .expect("reqwest Client 构建失败")
+    })
+}
 
 /// 数据源错误。携带可读信息，供设置页"接口测试"展示。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,7 +108,18 @@ where
 
     if try_primary {
         match primary.fetch_week(week_start).await {
-            Ok(events) => {
+            Ok(mut events) => {
+                // Faireconomy 主源成功：抓取 ForexFactory 实际值回填（2026-10-19）。
+                // 失败静默（空 map），不影响主流程。Client 全局复用。
+                if events.first().is_some_and(|e| e.source == Source::Faireconomy) {
+                    let actual_map =
+                        crate::forexfactory_actuals::fetch_actual_map(shared_client()).await;
+                    let filled =
+                        crate::forexfactory_actuals::fill_actuals(&mut events, &actual_map);
+                    if filled > 0 {
+                        eprintln!("[ff-actuals] 回填 {filled} 条实际值");
+                    }
+                }
                 return FetchOutcome {
                     events,
                     used: Some(Source::Primary),
