@@ -17,7 +17,7 @@ pub const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
 /// 全局复用 Client（避免每次回填新建连接池，2026-10-19 QA major）。
 static SHARED_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
-fn shared_client() -> &'static reqwest::Client {
+pub fn shared_client() -> &'static reqwest::Client {
     SHARED_CLIENT.get_or_init(|| {
         reqwest::Client::builder()
             .user_agent(BROWSER_UA)
