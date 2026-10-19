@@ -18,11 +18,31 @@ use async_trait::async_trait;
 use chrono::NaiveDate;
 use reqwest::Client;
 use serde::Deserialize;
+use std::sync::RwLock;
+use std::time::{Duration, Instant};
 
 use crate::mapping::classify_kind;
 use crate::model::{CalendarEvent, Country, EventKind, Source};
 use crate::schedule::TZ;
 use crate::source::{DataSource, SourceError, BROWSER_UA};
+
+/// 429 限流退避：上次 429 时间，5 分钟内不再请求（2026-10-19）
+static LAST_429: RwLock<Option<Instant>> = RwLock::new(None);
+
+/// 检查是否处于 429 退避期
+pub fn is_rate_limited() -> bool {
+    if let Some(t) = *LAST_429.read().unwrap() {
+        if t.elapsed() < Duration::from_secs(5 * 60) {
+            return true;
+        }
+    }
+    false
+}
+
+/// 记录 429
+fn record_429() {
+    *LAST_429.write().unwrap() = Some(Instant::now());
+}
 
 const FAIRECONOMY_URL: &str = "https://nfs.faireconomy.media/ff_calendar_thisweek.json";
 
@@ -93,6 +113,13 @@ impl DataSource for Faireconomy {
     }
 
     async fn fetch_week(&self, _week_start: NaiveDate) -> Result<Vec<CalendarEvent>, SourceError> {
+        // 429 退避检查
+        if is_rate_limited() {
+            return Err(SourceError::Network(
+                "Faireconomy 限流中（5 分钟内曾被 429），请稍后再试".to_string(),
+            ));
+        }
+
         let resp = self
             .client
             .get(FAIRECONOMY_URL)
@@ -101,6 +128,12 @@ impl DataSource for Faireconomy {
             .map_err(|e| SourceError::Network(format!("请求失败: {e}")))?;
 
         let status = resp.status();
+        if status.as_u16() == 429 {
+            record_429();
+            return Err(SourceError::Network(
+                "HTTP 429 Too Many Requests（已触发 5 分钟退避）".to_string(),
+            ));
+        }
         if status.as_u16() == 403 {
             let url = FAIRECONOMY_URL.to_string();
             return Err(SourceError::AuthBlocked(format!(
