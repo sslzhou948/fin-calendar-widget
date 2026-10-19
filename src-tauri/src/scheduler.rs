@@ -290,8 +290,8 @@ async fn sweep_stale_actuals(app: &AppHandle) {
         }
     }
 
-    // 找待回填事件
-    let pending: Vec<(String, String, String)> = {
+    // 找待回填事件（只计数，不建 Vec）
+    let pending_count: usize = {
         let cache = state.cache_snapshot();
         cache
             .events
@@ -306,40 +306,21 @@ async fn sweep_stale_actuals(app: &AppHandle) {
                 // 已过发布时间 10 分钟，且在 4 小时内
                 elapsed >= Duration::minutes(10) && elapsed <= Duration::hours(4)
             })
-            .map(|e| {
-                (
-                    e.title.clone(),
-                    format!("{:?}", e.country),
-                    e.release_at.format("%m-%d").to_string(),
-                )
-            })
-            .collect()
+            .count()
     };
 
-    if pending.is_empty() {
+    if pending_count == 0 {
         return;
     }
 
     eprintln!(
-        "[scheduler] 事件驱动回填：{} 个事件待更新，抓取 FF 页面",
-        pending.len()
+        "[scheduler] 事件驱动回填：{pending_count} 个事件待更新，抓取 FF 页面"
     );
     state.set_last_actuals_sweep(now);
 
-    // 抓一次 FF 页面，批量回填
-    let client = match reqwest::Client::builder()
-        .user_agent(caldata::source::BROWSER_UA)
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("[scheduler] Client 构建失败: {e}");
-            return;
-        }
-    };
-
-    let actual_map = caldata::forexfactory_actuals::fetch_actual_map(&client).await;
+    // 抓一次 FF 页面，批量回填（用 caldata 共享 Client）
+    let client = caldata::source::shared_client();
+    let actual_map = caldata::forexfactory_actuals::fetch_actual_map(client).await;
     if actual_map.is_empty() {
         eprintln!("[scheduler] FF 抓取为空，30 分钟后重试");
         return;
