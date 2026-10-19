@@ -10,6 +10,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// 事件来源。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Source {
+    /// `GET https://nfs.faireconomy.media/ff_calendar_thisweek.json`
+    ///（ForexFactory 日历公开 JSON，免认证，2026-10-19 起为主源）
+    Faireconomy,
     /// `GET https://sslecal2.investing.com`（官方公开小工具接口）
     Primary,
     /// `POST https://cn.investing.com/economic-calendar/Service/getCalendarFilteredData`（社区接口）
