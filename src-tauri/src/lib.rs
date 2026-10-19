@@ -336,26 +336,21 @@ async fn test_sources() -> Result<Vec<SourceTestResult>, String> {
 /// 返回：Faireconomy 事件数、FF 抓取行数、匹配回填数、样本（最多 5 条）
 #[tauri::command]
 async fn test_actuals() -> Result<serde_json::Value, String> {
-    use caldata::forexfactory_actuals::{fetch_actual_map, fill_actuals};
-    use caldata::source::BROWSER_UA;
-
-    let client = reqwest::Client::builder()
-        .user_agent(BROWSER_UA)
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| format!("Client 构建失败: {e}"))?;
+    use caldata::forexfactory_actuals::fill_actuals;
 
     // 1. 取 Faireconomy
     let fe = caldata::faireconomy::Faireconomy::new().map_err(|e| e.to_string())?;
-    let week_start = caldata::schedule::week_monday(caldata::schedule::now_sh().date_naive());
+    let week_start = caldata::schedule::week_monday(now_sh().date_naive());
     let mut events = fe
         .fetch_week(week_start)
         .await
         .map_err(|e| format!("Faireconomy 失败: {e}"))?;
     let fe_count = events.len();
 
-    // 2. 取 FF actual map
-    let actual_map = fetch_actual_map(&client).await;
+    // 2. 取 FF actual map（用 caldata 内部的共享 Client 构造）
+    let actual_map = caldata::forexfactory_actuals::fetch_actual_map_for_test()
+        .await
+        .map_err(|e| format!("ForexFactory 失败: {e}"))?;
     let ff_rows = actual_map.len();
 
     // 3. 回填（在副本上做，不污染缓存）
