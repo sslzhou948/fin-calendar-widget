@@ -13,6 +13,7 @@
 //!   须用一周真实数据校准（见 [`mapping::ImportanceMap`] 注释）。
 
 pub mod faireconomy;
+pub mod forexfactory_actuals;
 pub mod investing_backup;
 pub mod investing_primary;
 pub mod mapping;
