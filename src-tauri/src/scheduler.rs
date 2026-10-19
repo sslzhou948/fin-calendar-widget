@@ -324,6 +324,7 @@ pub(crate) fn format_errors(outcome: &caldata::source::FetchOutcome) -> String {
 
 pub(crate) fn describe_used(used: Option<Source>) -> &'static str {
     match used {
+        Some(Source::Faireconomy) => "faireconomy",
         Some(Source::Primary) => "primary",
         Some(Source::Backup) => "backup",
         None => "缓存兜底",
