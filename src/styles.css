@@ -69,7 +69,15 @@ body.no-frosted #panel {
   background: var(--bg-panel-solid);
 }
 
-#groups { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+#groups {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  /* 多列：内容多时自动分 2-3 列，避免单列折叠看不到（2026-10-19 用户需求） */
+  column-width: 300px;
+  column-gap: 1.6em;
+  column-rule: 1px solid var(--row-border);
+}
 
 .p-head {
   display: flex;
@@ -85,7 +93,7 @@ body.no-frosted #panel {
 .p-sub { font-size: .78em; color: var(--muted); white-space: nowrap; }
 
 /* 按天分组 */
-.day-group { margin-bottom: 0.5em; }
+.day-group { margin-bottom: 0.5em; break-inside: avoid; }
 .day-head {
   font-size: .95em;
   font-weight: 700;
