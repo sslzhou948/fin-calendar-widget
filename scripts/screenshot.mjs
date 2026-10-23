@@ -73,7 +73,7 @@ function composite({ side = 'right', frosted = true }) {
 
 async function shot(name, html, w = 1920, h = 1080) {
   const browser = await puppeteer.launch({
-    executablePath: CHROME_PATH, headless: 'new',
+    executablePath: CHROME_PATH, headless: 'new', timeout: 120000,
     args: ['--no-sandbox','--disable-gpu','--disable-dev-shm-usage','--hide-scrollbars',
            '--force-device-scale-factor=1','--font-render-hinting=none'],
   });
@@ -95,7 +95,7 @@ async function shotSettings() {
     .replace('</head>', `<style>html,body{margin:0}body{display:flex;justify-content:center;padding:40px;
       background:${wallpaperCss} #0a0e1a}</style></head>`);
   const browser = await puppeteer.launch({
-    executablePath: CHROME_PATH, headless: 'new',
+    executablePath: CHROME_PATH, headless: 'new', timeout: 120000,
     args: ['--no-sandbox','--disable-gpu','--disable-dev-shm-usage','--hide-scrollbars',
            '--force-device-scale-factor=1'],
   });
