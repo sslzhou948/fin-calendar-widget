@@ -11,18 +11,20 @@ use crate::model::CalendarEvent;
 /// 内部统一时区：北京时间。
 pub const TZ: Tz = chrono_tz::Asia::Shanghai;
 
-/// 下一个周日 00:00（Asia/Shanghai），严格晚于 `now`。
+/// 下一个每周全量刷新锚点：周一 10:00（Asia/Shanghai），严格晚于 `now`。
 ///
-/// - 周日当天 00:00 之前调用 → 返回今天 00:00（已过则顺延下周，见下）。
-/// - 触发点已过（含恰好等于）→ 顺延 7 天。
-pub fn next_sunday_midnight(now: DateTime<Tz>) -> DateTime<Tz> {
-    let midnight = TZ
-        .with_ymd_and_hms(now.year(), now.month(), now.day(), 0, 0, 0)
+/// 锚点选择（2026-10-23 用户拍板，清单 #11）：不用周日 0 点——周末
+/// 电脑多关机，定时形同虚设；周一 10:00 机器通常已开机、亚洲盘已开、
+/// 欧美周一数据未到，整周日历正好到位。关机错过由启动全量刷新兜底。
+/// 触发点已过（含恰好等于）→ 顺延 7 天。
+pub fn next_weekly_refresh(now: DateTime<Tz>) -> DateTime<Tz> {
+    let ten = TZ
+        .with_ymd_and_hms(now.year(), now.month(), now.day(), 10, 0, 0)
         .single()
-        .expect("当日 00:00 应为有效本地时间");
-    // 周一=0 … 周日=6；距下个周日的天数：周日→0，周一→6
-    let days_to_sunday = (6 - now.weekday().num_days_from_monday() as i64).rem_euclid(7);
-    let candidate = midnight + Duration::days(days_to_sunday);
+        .expect("当日 10:00 应为有效本地时间");
+    // 周一=0 … 周日=6；距下个周一的天数：周一→0，周二→6，周日→1
+    let days_until = (7 - now.weekday().num_days_from_monday() as i64).rem_euclid(7);
+    let candidate = ten + Duration::days(days_until);
     if candidate <= now {
         candidate + Duration::weeks(1)
     } else {
@@ -38,7 +40,7 @@ pub fn week_monday(date: NaiveDate) -> NaiveDate {
 /// 对账判定：本地缓存覆盖的 ISO 周 ≠ 当前 ISO 周 → 需要全量刷新。
 ///
 /// `covered` 为缓存中记录的 `(iso_year, iso_week)`。
-/// 覆盖场景：周日 00:00 关机错过 → 下次开机 `covered` 落后 → 返回 true 立即补拉。
+/// 覆盖场景：周一 10:00 关机错过 → 下次开机 `covered` 落后 → 返回 true 立即补拉。
 pub fn needs_refresh(covered: (i32, u32), now: DateTime<Tz>) -> bool {
     let iso = now.date_naive().iso_week();
     (iso.year(), iso.week()) != covered
@@ -124,58 +126,68 @@ mod tests {
             actual: None,
             kind: EventKind::Event,
             status: None,
-            source: Source::Primary,
+            source: Source::Jin10,
         }
     }
 
     #[test]
-    fn next_sunday_from_sunday_afternoon() {
-        // 2026-10-18 是周日；17:49 调用 → 下个周日 2026-10-25 00:00
+    fn weekly_refresh_from_sunday_afternoon() {
+        // 2026-10-18 是周日；17:49 调用 → 明天（周一）2026-10-19 10:00
         let now = dt(2026, 10, 18, 17, 49);
         assert_eq!(now.weekday(), Weekday::Sun);
-        let next = next_sunday_midnight(now);
+        let next = next_weekly_refresh(now);
         assert_eq!(
             next.format("%Y-%m-%d %H:%M").to_string(),
-            "2026-10-25 00:00"
+            "2026-10-19 10:00"
         );
     }
 
     #[test]
-    fn next_sunday_from_saturday() {
-        // 周六 10:00 → 明天（周日）00:00
-        let next = next_sunday_midnight(dt(2026, 10, 17, 10, 0));
+    fn weekly_refresh_from_saturday() {
+        // 周六 10:00 → 下周一 2026-10-19 10:00
+        let next = next_weekly_refresh(dt(2026, 10, 17, 10, 0));
         assert_eq!(
             next.format("%Y-%m-%d %H:%M").to_string(),
-            "2026-10-18 00:00"
+            "2026-10-19 10:00"
         );
     }
 
     #[test]
-    fn next_sunday_from_monday() {
-        // 周一 → 本周日 00:00（6 天后）
-        let next = next_sunday_midnight(dt(2026, 10, 19, 9, 0));
+    fn weekly_refresh_monday_before_ten() {
+        // 周一 09:00 → 今天 10:00
+        let next = next_weekly_refresh(dt(2026, 10, 19, 9, 0));
         assert_eq!(
             next.format("%Y-%m-%d %H:%M").to_string(),
-            "2026-10-25 00:00"
+            "2026-10-19 10:00"
         );
     }
 
     #[test]
-    fn next_sunday_from_wednesday() {
-        let next = next_sunday_midnight(dt(2026, 10, 21, 23, 59));
+    fn weekly_refresh_monday_after_ten() {
+        // 周一 11:00 → 下周一 2026-10-26 10:00
+        let next = next_weekly_refresh(dt(2026, 10, 19, 11, 0));
         assert_eq!(
             next.format("%Y-%m-%d %H:%M").to_string(),
-            "2026-10-25 00:00"
+            "2026-10-26 10:00"
         );
     }
 
     #[test]
-    fn next_sunday_exactly_midnight_rolls_over() {
-        // 恰好是周日 00:00 → 顺延一周（避免立即重复触发）
-        let next = next_sunday_midnight(dt(2026, 10, 18, 0, 0));
+    fn weekly_refresh_from_wednesday() {
+        let next = next_weekly_refresh(dt(2026, 10, 21, 23, 59));
         assert_eq!(
             next.format("%Y-%m-%d %H:%M").to_string(),
-            "2026-10-25 00:00"
+            "2026-10-26 10:00"
+        );
+    }
+
+    #[test]
+    fn weekly_refresh_exactly_ten_rolls_over() {
+        // 恰好周一 10:00 → 顺延一周（避免立即重复触发）
+        let next = next_weekly_refresh(dt(2026, 10, 19, 10, 0));
+        assert_eq!(
+            next.format("%Y-%m-%d %H:%M").to_string(),
+            "2026-10-26 10:00"
         );
     }
 
@@ -263,7 +275,7 @@ mod tests {
             actual: actual.map(|s| s.to_string()),
             kind: EventKind::Data,
             status: None,
-            source: Source::Primary,
+            source: Source::Jin10,
         }
     }
 
