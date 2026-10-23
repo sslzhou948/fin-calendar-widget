@@ -8,6 +8,10 @@ use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// 事件来源。
+/// v0.2 起只剩两路：Investing 两路（旧 Primary/Backup 变体）自 2026-10-19
+/// 被 Cloudflare 全拦、从未可用，已按用户要求删除（清单 #8）。
+/// 注意：旧 cache.json 里带 "Primary"/"Backup" 的事件会让整份缓存
+/// 反序列化失败 → read_json 回退默认空缓存，一次性无感重拉。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Source {
     /// 金十经济日历 WebSocket（`wss://wss-flash-2.jin10.com/`）
@@ -16,10 +20,6 @@ pub enum Source {
     /// `GET https://nfs.faireconomy.media/ff_calendar_thisweek.json`
     ///（ForexFactory 日历公开 JSON，免认证，备源）
     Faireconomy,
-    /// `GET https://sslecal2.investing.com`（官方公开小工具接口）
-    Primary,
-    /// `POST https://cn.investing.com/economic-calendar/Service/getCalendarFilteredData`（社区接口）
-    Backup,
 }
 
 /// 国家/地区。未知 → [`Country::Other`]，默认被用户配置的国家过滤掉。
@@ -188,7 +188,7 @@ mod tests {
             actual: Some("5.2%".to_string()),
             kind: EventKind::Data,
             status: None,
-            source: Source::Primary,
+            source: Source::Jin10,
         };
         let json = serde_json::to_string(&e).unwrap();
         let back: CalendarEvent = serde_json::from_str(&json).unwrap();
