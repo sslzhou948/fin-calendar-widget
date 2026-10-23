@@ -2,7 +2,7 @@
 //!
 //! - 配置：`app_data_dir/config.json`（TECH-DESIGN §8）
 //! - 缓存：`app_data_dir/cache.json`（covered_week、事件、已通知 id 集合，§4.2 对账依据）
-//! - 数据源：`Faireconomy` / `InvestingBackup` 实例各持一份（复用 reqwest Client），
+//! - 数据源：`Jin10`（主）/ `Faireconomy`（备一）/ `InvestingBackup`（备二）三路实例，
 //!   配置变更（importance_map）时重建。
 
 use std::collections::HashMap;
@@ -11,6 +11,7 @@ use std::sync::{Arc, RwLock};
 
 use caldata::faireconomy::Faireconomy;
 use caldata::investing_backup::InvestingBackup;
+use caldata::jin10::Jin10;
 use caldata::mapping::ImportanceMap;
 use caldata::model::CalendarEvent;
 use caldata::source::{SourceError, SourceMode};
@@ -243,17 +244,19 @@ pub struct Cache {
     pub last_error: Option<String>,
 }
 
-/// 两路数据源实例（复用内部 reqwest Client）
+/// 三路数据源实例（金十 WS / Faireconomy / InvestingBackup）
 /// primary = Faireconomy（公开 JSON，免反爬）；backup = Investing 社区接口。
 pub struct Sources {
-    pub primary: Faireconomy,
+    pub primary: Jin10,
+    pub secondary: Faireconomy,
     pub backup: InvestingBackup,
 }
 
 impl Sources {
     pub fn build(importance: &ImportanceMap) -> Result<Self, SourceError> {
         Ok(Self {
-            primary: Faireconomy::new()?,
+            primary: Jin10::new()?,
+            secondary: Faireconomy::new()?,
             backup: InvestingBackup::new()?.with_importance(*importance),
         })
     }
@@ -373,6 +376,15 @@ impl AppState {
                 if let Some(cached) = cache.events.iter_mut().find(|e| e.id == f.id) {
                     if cached.actual.is_none() {
                         cached.actual = Some(actual.clone());
+                        // 回填后重算 kind：首拉时无任何数值的指标会被判为 Event，
+                        // actual 到位后应升为 Data，否则前端按事件行渲染、实际值不可见
+                        // （FF 路径同款修复，2026-10-23 金十路径补齐）
+                        cached.kind = caldata::mapping::classify_kind(
+                            &cached.title,
+                            cached.forecast.as_deref(),
+                            cached.previous.as_deref(),
+                            cached.actual.as_deref(),
+                        );
                         newly.push(cached.clone());
                     }
                 }
