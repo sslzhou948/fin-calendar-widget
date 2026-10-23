@@ -1,6 +1,8 @@
 //! DataSource trait + 错误类型 + 自动降级逻辑。
 //!
-//! 降级策略：Primary 失败 → Backup；都失败 → 保留本地缓存并记录错误。
+//! 降级策略（2026-10-23 起三级）：金十 WebSocket（主） → Faireconomy
+//! （备一，成功后 FF 实际值回填） → InvestingBackup（备二）；都失败 →
+//! 保留本地缓存并记录错误。
 //! 配置 `SourceMode` 可强制走某一路（设置页"数据源选择"用）。
 
 use async_trait::async_trait;
@@ -80,18 +82,36 @@ pub struct FetchOutcome {
     pub events: Vec<CalendarEvent>,
     /// 实际命中的数据源；`None` 表示兜底用了缓存。
     pub used: Option<Source>,
-    /// 是否来自本地缓存（两路都失败时的兜底）。
+    /// 是否来自本地缓存（全链都失败时的兜底）。
     pub from_cache: bool,
     /// 按尝试顺序记录的错误（供"接口测试"与日志展示）。
     pub errors: Vec<(String, SourceError)>,
 }
 
-/// 自动降级拉取：Primary → Backup → 本地缓存。
+/// Faireconomy 命中时抓 ForexFactory 实际值回填（2026-10-19）。
+/// 失败静默（空 map），不影响主流程。Client 全局复用。
+async fn fill_ff_actuals(events: &mut Vec<CalendarEvent>) {
+    if events
+        .first()
+        .is_some_and(|e| e.source == Source::Faireconomy)
+    {
+        let actual_map = crate::forexfactory_actuals::fetch_actual_map(shared_client()).await;
+        let filled = crate::forexfactory_actuals::fill_actuals(events, &actual_map);
+        if filled > 0 {
+            eprintln!("[ff-actuals] 回填 {filled} 条实际值");
+        }
+    }
+}
+
+/// 自动降级拉取：金十（主） → Faireconomy（备一） → InvestingBackup
+/// （备二） → 本地缓存。
 ///
-/// - `PrimaryOnly` / `BackupOnly`：只尝试指定的一路。
-/// - 两路都失败：若有 `cache` 则返回缓存（`from_cache=true`），否则返回空列表 + 错误。
-pub async fn fetch_week_with_fallback<P, B>(
+/// - `PrimaryOnly`：只尝试主源；`BackupOnly`：只尝试备二。
+/// - 全部失败：若有 `cache` 则返回缓存（`from_cache=true`），否则空列表 + 错误。
+/// - `used` 取获胜事件自带的来源标记（事件为空时用该路的来源常量）。
+pub async fn fetch_week_with_fallback<P, S, B>(
     primary: &P,
+    secondary: &S,
     backup: &B,
     mode: SourceMode,
     week_start: NaiveDate,
@@ -99,30 +119,44 @@ pub async fn fetch_week_with_fallback<P, B>(
 ) -> FetchOutcome
 where
     P: DataSource,
+    S: DataSource,
+    B: DataSource,
+{
+    fetch_week_chain(primary, secondary, backup, mode, week_start, cache, true).await
+}
+
+/// 降级链本体。`fill_ff=true` 时 Faireconomy 命中后抓 FF 页面回填 actual
+/// （生产路径）；单元测试传 false 保持 hermetic（不发真实网络请求）。
+async fn fetch_week_chain<P, S, B>(
+    primary: &P,
+    secondary: &S,
+    backup: &B,
+    mode: SourceMode,
+    week_start: NaiveDate,
+    cache: Option<Vec<CalendarEvent>>,
+    fill_ff: bool,
+) -> FetchOutcome
+where
+    P: DataSource,
+    S: DataSource,
     B: DataSource,
 {
     let mut errors: Vec<(String, SourceError)> = Vec::new();
 
     let try_primary = matches!(mode, SourceMode::Auto | SourceMode::PrimaryOnly);
+    let try_secondary = matches!(mode, SourceMode::Auto);
     let try_backup = matches!(mode, SourceMode::Auto | SourceMode::BackupOnly);
 
     if try_primary {
         match primary.fetch_week(week_start).await {
             Ok(mut events) => {
-                // Faireconomy 主源成功：抓取 ForexFactory 实际值回填（2026-10-19）。
-                // 失败静默（空 map），不影响主流程。Client 全局复用。
-                if events.first().is_some_and(|e| e.source == Source::Faireconomy) {
-                    let actual_map =
-                        crate::forexfactory_actuals::fetch_actual_map(shared_client()).await;
-                    let filled =
-                        crate::forexfactory_actuals::fill_actuals(&mut events, &actual_map);
-                    if filled > 0 {
-                        eprintln!("[ff-actuals] 回填 {filled} 条实际值");
-                    }
+                if fill_ff {
+                    fill_ff_actuals(&mut events).await;
                 }
+                let used = events.first().map(|e| e.source).unwrap_or(Source::Jin10);
                 return FetchOutcome {
                     events,
-                    used: Some(Source::Primary),
+                    used: Some(used),
                     from_cache: false,
                     errors,
                 };
@@ -130,12 +164,36 @@ where
             Err(e) => errors.push((primary.name().to_string(), e)),
         }
     }
-    if try_backup {
-        match backup.fetch_week(week_start).await {
-            Ok(events) => {
+    if try_secondary {
+        match secondary.fetch_week(week_start).await {
+            Ok(mut events) => {
+                if fill_ff {
+                    fill_ff_actuals(&mut events).await;
+                }
+                let used = events
+                    .first()
+                    .map(|e| e.source)
+                    .unwrap_or(Source::Faireconomy);
                 return FetchOutcome {
                     events,
-                    used: Some(Source::Backup),
+                    used: Some(used),
+                    from_cache: false,
+                    errors,
+                };
+            }
+            Err(e) => errors.push((secondary.name().to_string(), e)),
+        }
+    }
+    if try_backup {
+        match backup.fetch_week(week_start).await {
+            Ok(mut events) => {
+                if fill_ff {
+                    fill_ff_actuals(&mut events).await;
+                }
+                let used = events.first().map(|e| e.source).unwrap_or(Source::Backup);
+                return FetchOutcome {
+                    events,
+                    used: Some(used),
                     from_cache: false,
                     errors,
                 };
@@ -144,7 +202,7 @@ where
         }
     }
 
-    // 两路都失败（或被模式禁用）：保留缓存
+    // 全部失败（或被模式禁用）：保留缓存
     FetchOutcome {
         events: cache.unwrap_or_default(),
         used: None,
@@ -179,7 +237,7 @@ mod tests {
         }
     }
 
-    fn sample_event() -> CalendarEvent {
+    fn sample_event(source: Source) -> CalendarEvent {
         use crate::schedule::TZ;
         use chrono::TimeZone;
         CalendarEvent {
@@ -193,7 +251,21 @@ mod tests {
             actual: None,
             kind: crate::model::EventKind::Event,
             status: None,
-            source: Source::Primary,
+            source,
+        }
+    }
+
+    fn ok(name: &'static str, source: Source) -> MockSource {
+        MockSource {
+            name,
+            result: Ok(vec![sample_event(source)]),
+        }
+    }
+
+    fn err(name: &'static str, msg: &str) -> MockSource {
+        MockSource {
+            name,
+            result: Err(SourceError::Network(msg.into())),
         }
     }
 
@@ -203,94 +275,95 @@ mod tests {
 
     #[tokio::test]
     async fn primary_success_no_fallback() {
-        let p = MockSource {
-            name: "primary",
-            result: Ok(vec![sample_event()]),
-        };
-        let b = MockSource {
-            name: "backup",
-            result: Err(SourceError::Network("should not be called".into())),
-        };
-        let out = fetch_week_with_fallback(&p, &b, SourceMode::Auto, monday(), None).await;
-        assert_eq!(out.used, Some(Source::Primary));
+        let p = ok("jin10", Source::Jin10);
+        let s = err("faireconomy", "should not be called");
+        let b = err("backup", "should not be called");
+        let out = fetch_week_chain(&p, &s, &b, SourceMode::Auto, monday(), None, false).await;
+        assert_eq!(out.used, Some(Source::Jin10));
         assert!(!out.from_cache);
         assert_eq!(out.events.len(), 1);
         assert!(out.errors.is_empty());
     }
 
     #[tokio::test]
-    async fn primary_fails_then_backup() {
-        let p = MockSource {
-            name: "primary",
-            result: Err(SourceError::AuthBlocked("403".into())),
-        };
-        let b = MockSource {
-            name: "backup",
-            result: Ok(vec![sample_event()]),
-        };
-        let out = fetch_week_with_fallback(&p, &b, SourceMode::Auto, monday(), None).await;
-        assert_eq!(out.used, Some(Source::Backup));
+    async fn primary_fails_then_secondary() {
+        let p = err("jin10", "ws down");
+        let s = ok("faireconomy", Source::Faireconomy);
+        let b = err("backup", "should not be called");
+        let out = fetch_week_chain(&p, &s, &b, SourceMode::Auto, monday(), None, false).await;
+        // used 以获胜事件自带来源为准；测试走 fetch_week_chain(fill=false)
+        // 不触发 FF 回填网络请求
+        assert_eq!(out.used, Some(Source::Faireconomy));
         assert!(!out.from_cache);
-        assert_eq!(out.events.len(), 1);
         assert_eq!(out.errors.len(), 1);
-        assert_eq!(out.errors[0].0, "primary");
+        assert_eq!(out.errors[0].0, "jin10");
     }
 
     #[tokio::test]
-    async fn both_fail_keeps_cache() {
-        let p = MockSource {
-            name: "primary",
-            result: Err(SourceError::Network("timeout".into())),
-        };
-        let b = MockSource {
-            name: "backup",
-            result: Err(SourceError::Parse("bad json".into())),
-        };
-        let out = fetch_week_with_fallback(
+    async fn secondary_fails_then_backup() {
+        let p = err("jin10", "ws down");
+        let s = err("faireconomy", "429");
+        let b = ok("backup", Source::Backup);
+        let out = fetch_week_chain(&p, &s, &b, SourceMode::Auto, monday(), None, false).await;
+        assert_eq!(out.used, Some(Source::Backup));
+        assert!(!out.from_cache);
+        assert_eq!(out.errors.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn all_fail_keeps_cache() {
+        let p = err("jin10", "timeout");
+        let s = err("faireconomy", "429");
+        let b = err("backup", "bad json");
+        let out = fetch_week_chain(
             &p,
+            &s,
             &b,
             SourceMode::Auto,
             monday(),
-            Some(vec![sample_event()]),
+            Some(vec![sample_event(Source::Jin10)]),
+            false,
         )
         .await;
         assert_eq!(out.used, None);
         assert!(out.from_cache);
         assert_eq!(out.events.len(), 1);
-        assert_eq!(out.errors.len(), 2);
+        assert_eq!(out.errors.len(), 3);
     }
 
     #[tokio::test]
-    async fn both_fail_no_cache_empty() {
-        let p = MockSource {
-            name: "primary",
-            result: Err(SourceError::Network("timeout".into())),
-        };
-        let b = MockSource {
-            name: "backup",
-            result: Err(SourceError::Network("dns".into())),
-        };
-        let out = fetch_week_with_fallback(&p, &b, SourceMode::Auto, monday(), None).await;
+    async fn all_fail_no_cache_empty() {
+        let p = err("jin10", "timeout");
+        let s = err("faireconomy", "dns");
+        let b = err("backup", "dns");
+        let out = fetch_week_chain(&p, &s, &b, SourceMode::Auto, monday(), None, false).await;
         assert_eq!(out.used, None);
         assert!(out.from_cache);
         assert!(out.events.is_empty());
-        assert_eq!(out.errors.len(), 2);
+        assert_eq!(out.errors.len(), 3);
     }
 
     #[tokio::test]
-    async fn primary_only_mode_skips_backup() {
-        let p = MockSource {
-            name: "primary",
-            result: Err(SourceError::Network("down".into())),
-        };
-        let b = MockSource {
-            name: "backup",
-            result: Ok(vec![sample_event()]), // 不应被调用
-        };
-        let out = fetch_week_with_fallback(&p, &b, SourceMode::PrimaryOnly, monday(), None).await;
+    async fn primary_only_mode_skips_others() {
+        let p = err("jin10", "down");
+        let s = ok("faireconomy", Source::Faireconomy);
+        let b = ok("backup", Source::Backup);
+        let out = fetch_week_chain(&p, &s, &b, SourceMode::PrimaryOnly, monday(), None, false)
+            .await;
         assert_eq!(out.used, None);
         assert!(out.from_cache);
         assert!(out.events.is_empty());
-        assert_eq!(out.errors.len(), 1); // 只有 primary 的错误
+        assert_eq!(out.errors.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn backup_only_mode_skips_others() {
+        let p = ok("jin10", Source::Jin10);
+        let s = ok("faireconomy", Source::Faireconomy);
+        let b = ok("backup", Source::Backup);
+        let out = fetch_week_chain(&p, &s, &b, SourceMode::BackupOnly, monday(), None, false)
+            .await;
+        assert_eq!(out.used, Some(Source::Backup));
+        assert!(out.errors.is_empty());
     }
 }
