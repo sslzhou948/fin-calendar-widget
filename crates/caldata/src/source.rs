@@ -1,9 +1,9 @@
 //! DataSource trait + 错误类型 + 自动降级逻辑。
 //!
-//! 降级策略（2026-10-23 起三级）：金十 WebSocket（主） → Faireconomy
-//! （备一，成功后 FF 实际值回填） → InvestingBackup（备二）；都失败 →
-//! 保留本地缓存并记录错误。
-//! 配置 `SourceMode` 可强制走某一路（设置页"数据源选择"用）。
+//! 降级策略（2026-10-23 起，v0.2 精简）：金十 WebSocket（主） →
+//! Faireconomy（备，成功后 FF 实际值回填）；都失败 → 保留本地缓存。
+//! 配置 `SourceMode` 可强制只走主源（设置页"数据源选择"用）。
+//! （Investing 两路 2026-10-19 起被 Cloudflare 全拦，v0.2 已删除，清单 #8。）
 
 use async_trait::async_trait;
 use chrono::NaiveDate;
@@ -66,13 +66,11 @@ pub trait DataSource: Send + Sync {
 /// 数据源选择模式（设置页可配）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SourceMode {
-    /// 自动：Primary 失败 → Backup → 缓存
+    /// 自动：主源失败 → 备源 → 缓存
     #[default]
     Auto,
-    /// 只走 Primary，失败直接返回错误
+    /// 只走主源，失败直接返回错误
     PrimaryOnly,
-    /// 只走 Backup，失败直接返回错误
-    BackupOnly,
 }
 
 /// 一次带降级的拉取结果。
@@ -103,16 +101,14 @@ async fn fill_ff_actuals(events: &mut Vec<CalendarEvent>) {
     }
 }
 
-/// 自动降级拉取：金十（主） → Faireconomy（备一） → InvestingBackup
-/// （备二） → 本地缓存。
+/// 自动降级拉取：金十（主） → Faireconomy（备） → 本地缓存。
 ///
-/// - `PrimaryOnly`：只尝试主源；`BackupOnly`：只尝试备二。
+/// - `PrimaryOnly`：只尝试主源。
 /// - 全部失败：若有 `cache` 则返回缓存（`from_cache=true`），否则空列表 + 错误。
 /// - `used` 取获胜事件自带的来源标记（事件为空时用该路的来源常量）。
-pub async fn fetch_week_with_fallback<P, S, B>(
+pub async fn fetch_week_with_fallback<P, S>(
     primary: &P,
     secondary: &S,
-    backup: &B,
     mode: SourceMode,
     week_start: NaiveDate,
     cache: Option<Vec<CalendarEvent>>,
@@ -120,17 +116,15 @@ pub async fn fetch_week_with_fallback<P, S, B>(
 where
     P: DataSource,
     S: DataSource,
-    B: DataSource,
 {
-    fetch_week_chain(primary, secondary, backup, mode, week_start, cache, true).await
+    fetch_week_chain(primary, secondary, mode, week_start, cache, true).await
 }
 
 /// 降级链本体。`fill_ff=true` 时 Faireconomy 命中后抓 FF 页面回填 actual
 /// （生产路径）；单元测试传 false 保持 hermetic（不发真实网络请求）。
-async fn fetch_week_chain<P, S, B>(
+async fn fetch_week_chain<P, S>(
     primary: &P,
     secondary: &S,
-    backup: &B,
     mode: SourceMode,
     week_start: NaiveDate,
     cache: Option<Vec<CalendarEvent>>,
@@ -139,32 +133,25 @@ async fn fetch_week_chain<P, S, B>(
 where
     P: DataSource,
     S: DataSource,
-    B: DataSource,
 {
     let mut errors: Vec<(String, SourceError)> = Vec::new();
 
-    let try_primary = matches!(mode, SourceMode::Auto | SourceMode::PrimaryOnly);
-    let try_secondary = matches!(mode, SourceMode::Auto);
-    let try_backup = matches!(mode, SourceMode::Auto | SourceMode::BackupOnly);
-
-    if try_primary {
-        match primary.fetch_week(week_start).await {
-            Ok(mut events) => {
-                if fill_ff {
-                    fill_ff_actuals(&mut events).await;
-                }
-                let used = events.first().map(|e| e.source).unwrap_or(Source::Jin10);
-                return FetchOutcome {
-                    events,
-                    used: Some(used),
-                    from_cache: false,
-                    errors,
-                };
+    match primary.fetch_week(week_start).await {
+        Ok(mut events) => {
+            if fill_ff {
+                fill_ff_actuals(&mut events).await;
             }
-            Err(e) => errors.push((primary.name().to_string(), e)),
+            let used = events.first().map(|e| e.source).unwrap_or(Source::Jin10);
+            return FetchOutcome {
+                events,
+                used: Some(used),
+                from_cache: false,
+                errors,
+            };
         }
+        Err(e) => errors.push((primary.name().to_string(), e)),
     }
-    if try_secondary {
+    if matches!(mode, SourceMode::Auto) {
         match secondary.fetch_week(week_start).await {
             Ok(mut events) => {
                 if fill_ff {
@@ -182,23 +169,6 @@ where
                 };
             }
             Err(e) => errors.push((secondary.name().to_string(), e)),
-        }
-    }
-    if try_backup {
-        match backup.fetch_week(week_start).await {
-            Ok(mut events) => {
-                if fill_ff {
-                    fill_ff_actuals(&mut events).await;
-                }
-                let used = events.first().map(|e| e.source).unwrap_or(Source::Backup);
-                return FetchOutcome {
-                    events,
-                    used: Some(used),
-                    from_cache: false,
-                    errors,
-                };
-            }
-            Err(e) => errors.push((backup.name().to_string(), e)),
         }
     }
 
@@ -277,8 +247,7 @@ mod tests {
     async fn primary_success_no_fallback() {
         let p = ok("jin10", Source::Jin10);
         let s = err("faireconomy", "should not be called");
-        let b = err("backup", "should not be called");
-        let out = fetch_week_chain(&p, &s, &b, SourceMode::Auto, monday(), None, false).await;
+        let out = fetch_week_chain(&p, &s, SourceMode::Auto, monday(), None, false).await;
         assert_eq!(out.used, Some(Source::Jin10));
         assert!(!out.from_cache);
         assert_eq!(out.events.len(), 1);
@@ -289,8 +258,7 @@ mod tests {
     async fn primary_fails_then_secondary() {
         let p = err("jin10", "ws down");
         let s = ok("faireconomy", Source::Faireconomy);
-        let b = err("backup", "should not be called");
-        let out = fetch_week_chain(&p, &s, &b, SourceMode::Auto, monday(), None, false).await;
+        let out = fetch_week_chain(&p, &s, SourceMode::Auto, monday(), None, false).await;
         // used 以获胜事件自带来源为准；测试走 fetch_week_chain(fill=false)
         // 不触发 FF 回填网络请求
         assert_eq!(out.used, Some(Source::Faireconomy));
@@ -300,25 +268,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn secondary_fails_then_backup() {
-        let p = err("jin10", "ws down");
-        let s = err("faireconomy", "429");
-        let b = ok("backup", Source::Backup);
-        let out = fetch_week_chain(&p, &s, &b, SourceMode::Auto, monday(), None, false).await;
-        assert_eq!(out.used, Some(Source::Backup));
-        assert!(!out.from_cache);
-        assert_eq!(out.errors.len(), 2);
-    }
-
-    #[tokio::test]
     async fn all_fail_keeps_cache() {
         let p = err("jin10", "timeout");
         let s = err("faireconomy", "429");
-        let b = err("backup", "bad json");
         let out = fetch_week_chain(
             &p,
             &s,
-            &b,
             SourceMode::Auto,
             monday(),
             Some(vec![sample_event(Source::Jin10)]),
@@ -328,27 +283,25 @@ mod tests {
         assert_eq!(out.used, None);
         assert!(out.from_cache);
         assert_eq!(out.events.len(), 1);
-        assert_eq!(out.errors.len(), 3);
+        assert_eq!(out.errors.len(), 2);
     }
 
     #[tokio::test]
     async fn all_fail_no_cache_empty() {
         let p = err("jin10", "timeout");
         let s = err("faireconomy", "dns");
-        let b = err("backup", "dns");
-        let out = fetch_week_chain(&p, &s, &b, SourceMode::Auto, monday(), None, false).await;
+        let out = fetch_week_chain(&p, &s, SourceMode::Auto, monday(), None, false).await;
         assert_eq!(out.used, None);
         assert!(out.from_cache);
         assert!(out.events.is_empty());
-        assert_eq!(out.errors.len(), 3);
+        assert_eq!(out.errors.len(), 2);
     }
 
     #[tokio::test]
     async fn primary_only_mode_skips_others() {
         let p = err("jin10", "down");
         let s = ok("faireconomy", Source::Faireconomy);
-        let b = ok("backup", Source::Backup);
-        let out = fetch_week_chain(&p, &s, &b, SourceMode::PrimaryOnly, monday(), None, false)
+        let out = fetch_week_chain(&p, &s, SourceMode::PrimaryOnly, monday(), None, false)
             .await;
         assert_eq!(out.used, None);
         assert!(out.from_cache);
@@ -356,14 +309,4 @@ mod tests {
         assert_eq!(out.errors.len(), 1);
     }
 
-    #[tokio::test]
-    async fn backup_only_mode_skips_others() {
-        let p = ok("jin10", Source::Jin10);
-        let s = ok("faireconomy", Source::Faireconomy);
-        let b = ok("backup", Source::Backup);
-        let out = fetch_week_chain(&p, &s, &b, SourceMode::BackupOnly, monday(), None, false)
-            .await;
-        assert_eq!(out.used, Some(Source::Backup));
-        assert!(out.errors.is_empty());
-    }
 }
