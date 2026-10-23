@@ -10,8 +10,11 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// 事件来源。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Source {
+    /// 金十经济日历 WebSocket（`wss://wss-flash-2.jin10.com/`）
+    ///（2026-10-23 起为默认主源：中文标题、原生星级、自带实际值）
+    Jin10,
     /// `GET https://nfs.faireconomy.media/ff_calendar_thisweek.json`
-    ///（ForexFactory 日历公开 JSON，免认证，2026-10-19 起为主源）
+    ///（ForexFactory 日历公开 JSON，免认证，备源）
     Faireconomy,
     /// `GET https://sslecal2.investing.com`（官方公开小工具接口）
     Primary,
