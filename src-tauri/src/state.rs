@@ -209,11 +209,11 @@ impl Config {
         if !(25..=75).contains(&self.panel_width_pct) {
             return Err("panel_width_pct 必须在 25–75 之间".to_string());
         }
-        if ![\"auto\", \"manual\"].contains(&self.width_mode.as_str()) {
-            return Err(\"width_mode 只能是 auto / manual\".to_string());
+        if !["auto", "manual"].contains(&self.width_mode.as_str()) {
+            return Err("width_mode 只能是 auto / manual".to_string());
         }
         if !(1..=6).contains(&self.manual_columns) {
-            return Err(\"manual_columns 必须在 1–6 之间\".to_string());
+            return Err("manual_columns 必须在 1–6 之间".to_string());
         }
         if self.frost_opacity > 100 {
             return Err("frost_opacity 必须在 0–100 之间".to_string());
