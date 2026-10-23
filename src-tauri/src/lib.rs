@@ -23,7 +23,7 @@ use caldata::faireconomy::Faireconomy;
 use caldata::jin10::Jin10;
 use caldata::model::Source;
 use caldata::schedule::{self, TZ};
-use caldata::source::{DataSource, FetchOutcome, SourceError};
+use caldata::source::{DataSource, FetchOutcome};
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use serde::Serialize;
@@ -40,7 +40,8 @@ use state::{AppState, Config};
 /// 防数据刷新触发的改宽把穿透偷偷开回、与前端泳道状态脱节。
 struct InteractiveState {
     on: AtomicBool,
-    item: Mutex<Option<CheckMenuItem>>,
+    // Tauri 2.12 的菜单类型带 Runtime 泛型（CI E0107 实证），须写明 Wry
+    item: Mutex<Option<CheckMenuItem<tauri::Wry>>>,
 }
 
 /// 上海时区当前时间（内部统一时区，TECH-DESIGN §6）
