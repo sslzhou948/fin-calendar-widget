@@ -58,7 +58,11 @@ pub fn build_wake_list(events: &[CalendarEvent], now: DateTime<Tz>) -> Vec<(Date
     list
 }
 
-/// 扫尾重试的周（纯函数，供 scheduler 的兜底任务调用）。
+/// 扫尾重试的周（纯函数）。
+///
+/// 注意（2026-10-23）：生产调度已改用 scheduler 内的事件驱动 sweep
+/// （按 10min–4h 窗口 + 数据源分流），本函数无生产调用方，仅保留供
+/// 单元测试与未来复用，勿与 scheduler::reconcile 的同名局部变量混淆。
 ///
 /// 选中条件（需同时满足）：
 /// - `kind == Data`（只有数据行才有 actual 可抓）；
