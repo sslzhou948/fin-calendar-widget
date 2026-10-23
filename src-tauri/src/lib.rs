@@ -22,6 +22,7 @@ use std::time::Duration;
 
 use caldata::faireconomy::Faireconomy;
 use caldata::investing_backup::InvestingBackup;
+use caldata::jin10::Jin10;
 use caldata::model::Source;
 use caldata::schedule::{self, TZ};
 use caldata::source::{DataSource, FetchOutcome, SourceError};
@@ -271,14 +272,18 @@ async fn set_config(
     Ok(())
 }
 
-/// 接口测试（TECH-DESIGN §8）：对 primary / backup 分别实测一次本周拉取，
-/// 返回连通性、延迟、解析行数、错误原文（不受配置的 source 模式影响，两路都测）
+/// 接口测试（TECH-DESIGN §8）：对金十 / Faireconomy / InvestingBackup 三路分别实测一次本周拉取，
+/// 返回连通性、延迟、解析行数、错误原文（不受配置的 source 模式影响，三路都测）
 #[tauri::command]
 async fn test_sources() -> Result<Vec<SourceTestResult>, String> {
     let week_start = schedule::week_monday(now_sh().date_naive());
     let candidates: Vec<(&str, Result<Box<dyn DataSource>, SourceError>)> = vec![
         (
-            "primary",
+            "jin10",
+            Jin10::new().map(|s| Box::new(s) as Box<dyn DataSource>),
+        ),
+        (
+            "faireconomy",
             Faireconomy::new().map(|s| Box::new(s) as Box<dyn DataSource>),
         ),
         (
@@ -286,7 +291,7 @@ async fn test_sources() -> Result<Vec<SourceTestResult>, String> {
             InvestingBackup::new().map(|s| Box::new(s) as Box<dyn DataSource>),
         ),
     ];
-    let mut out = Vec::with_capacity(2);
+    let mut out = Vec::with_capacity(3);
     for (label, res) in candidates {
         let src = match res {
             Ok(s) => s,
@@ -332,32 +337,40 @@ async fn test_sources() -> Result<Vec<SourceTestResult>, String> {
     Ok(out)
 }
 
-/// 实际值回填测试（设置页"实际值回填测试"按钮调用，2026-10-19）
-/// 返回：Faireconomy 事件数、FF 抓取行数、匹配回填数、样本（最多 5 条）
+/// 实际值覆盖测试（设置页"实际值回填测试"按钮调用，2026-10-23 改版）
+/// 走生产同款降级链（金十 → Faireconomy+FF → Investing）抓本周，
+/// 统计已公布数据行中带实际值的比例，并给出样本。
+/// 返回：{ source, total, published, with_actual, samples[≤5] }
 #[tauri::command]
 async fn test_actuals() -> Result<serde_json::Value, String> {
-    use caldata::forexfactory_actuals::fill_actuals;
+    let jin10 = Jin10::new().map_err(|e| e.to_string())?;
+    let fe = Faireconomy::new().map_err(|e| e.to_string())?;
+    let backup = InvestingBackup::new().map_err(|e| e.to_string())?;
+    let week_start = schedule::week_monday(now_sh().date_naive());
+    let outcome = caldata::source::fetch_week_with_fallback(
+        &jin10,
+        &fe,
+        &backup,
+        caldata::source::SourceMode::Auto,
+        week_start,
+        None,
+    )
+    .await;
+    if outcome.from_cache {
+        return Err(format!(
+            "全链数据源均失败：{}",
+            scheduler::format_errors(&outcome)
+        ));
+    }
 
-    // 1. 取 Faireconomy
-    let fe = caldata::faireconomy::Faireconomy::new().map_err(|e| e.to_string())?;
-    let week_start = caldata::schedule::week_monday(now_sh().date_naive());
-    let mut events = fe
-        .fetch_week(week_start)
-        .await
-        .map_err(|e| format!("Faireconomy 失败: {e}"))?;
-    let fe_count = events.len();
-
-    // 2. 取 FF actual map（用 caldata 内部的共享 Client 构造）
-    let actual_map = caldata::forexfactory_actuals::fetch_actual_map_for_test()
-        .await
-        .map_err(|e| format!("ForexFactory 失败: {e}"))?;
-    let ff_rows = actual_map.len();
-
-    // 3. 回填（在副本上做，不污染缓存）
-    let filled = fill_actuals(&mut events, &actual_map);
-
-    // 4. 取样本：前 5 条有 actual 的
-    let samples: Vec<serde_json::Value> = events
+    let now = now_sh();
+    let events = &outcome.events;
+    let published: Vec<_> = events
+        .iter()
+        .filter(|e| e.kind == caldata::model::EventKind::Data && e.release_at <= now)
+        .collect();
+    let with_actual = published.iter().filter(|e| e.actual.is_some()).count();
+    let samples: Vec<serde_json::Value> = published
         .iter()
         .filter(|e| e.actual.is_some())
         .take(5)
@@ -373,9 +386,10 @@ async fn test_actuals() -> Result<serde_json::Value, String> {
         .collect();
 
     Ok(serde_json::json!({
-        "fe_events": fe_count,
-        "ff_rows": ff_rows,
-        "filled": filled,
+        "source": scheduler::describe_used(outcome.used),
+        "total": events.len(),
+        "published": published.len(),
+        "with_actual": with_actual,
         "samples": samples,
     }))
 }
@@ -389,6 +403,7 @@ async fn refresh_now(app: AppHandle) -> Result<RefreshReport, String> {
         ok,
         events: outcome.events.len(),
         used: outcome.used.map(|s| match s {
+            Source::Jin10 => "jin10".to_string(),
             Source::Faireconomy => "faireconomy".to_string(),
             Source::Primary => "primary".to_string(),
             Source::Backup => "backup".to_string(),
