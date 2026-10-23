@@ -268,6 +268,9 @@ impl Sources {
 pub struct AppState {
     dir: PathBuf,
     config: RwLock<Config>,
+    /// 最后落盘的配置（清单 #13）：预览只改 `config`（内存），设置窗
+    /// 关闭时与它对比决定是否回滚
+    saved_config: RwLock<Config>,
     cache: RwLock<Cache>,
     sources: RwLock<Arc<Sources>>,
     rebuild_tx: tokio::sync::mpsc::Sender<()>,
@@ -279,6 +282,7 @@ impl AppState {
     /// 从 app_data_dir 加载（文件缺失/损坏 → 默认值）
     pub fn load(dir: PathBuf) -> Result<(Self, tokio::sync::mpsc::Receiver<()>), SourceError> {
         let config = read_json::<Config>(&dir.join(CONFIG_FILE));
+        let saved_config = config.clone();
         let cache = read_json::<Cache>(&dir.join(CACHE_FILE));
         let sources = Arc::new(Sources::build()?);
         let (tx, rx) = tokio::sync::mpsc::channel(1);
@@ -286,6 +290,7 @@ impl AppState {
             Self {
                 dir,
                 config: RwLock::new(config),
+                saved_config: RwLock::new(saved_config),
                 cache: RwLock::new(cache),
                 sources: RwLock::new(sources),
                 rebuild_tx: tx,
@@ -324,7 +329,8 @@ impl AppState {
     }
 
     /// 仅内存生效（设置页预览，清单 #7）：换配置 + 重建数据源，**不落盘**。
-    /// 「应用」走 save_config；「取消」由设置页以快照再次调用本方法回滚。
+    /// 「应用」走 save_config；未应用的预览由窗口销毁时的
+    /// rollback_preview 回滚（清单 #13，JS 快照回滚已删除）。
     pub fn apply_config(&self, config: Config) -> Result<(), String> {
         let sources = Arc::new(
             Sources::build()
@@ -343,9 +349,30 @@ impl AppState {
                 .map_err(|e| format!("数据源初始化失败: {e}"))?,
         );
         write_json(&self.dir.join(CONFIG_FILE), &config)?;
+        *self.saved_config.write().unwrap() = config.clone();
         *self.config.write().unwrap() = config;
         *self.sources.write().unwrap() = sources;
         Ok(())
+    }
+
+    /// 设置窗关闭回滚（清单 #13）：预览只改内存配置；窗口销毁后若内存
+    /// 配置与最后落盘配置不一致，恢复落盘配置并返回 true（调用方据此
+    /// 重定位主窗 + 广播刷新）；一致返回 false，关窗零副作用。
+    /// 比较走序列化（Config 未派生 PartialEq；字段顺序稳定可比）。
+    pub fn rollback_preview(&self) -> bool {
+        let saved = self.saved_config.read().unwrap().clone();
+        let live = self.config_snapshot();
+        let same = serde_json::to_string(&saved).ok() == serde_json::to_string(&live).ok();
+        if same {
+            return false;
+        }
+        match self.apply_config(saved) {
+            Ok(()) => true,
+            Err(e) => {
+                eprintln!("[state] 设置关闭回滚预览失败: {e}");
+                false
+            }
+        }
     }
 
     /// 全量刷新成功后替换事件集并记录 covered_week。
@@ -449,6 +476,11 @@ impl AppState {
         if let Err(e) = write_json(&self.dir.join(CACHE_FILE), &*cache) {
             eprintln!("[state] cache.json 写入失败: {e}");
         }
+    }
+
+    /// 对外落盘入口（scheduler 的 FF 回填分支用，QA M5）
+    pub fn persist_cache_now(&self) {
+        self.persist_cache();
     }
 }
 

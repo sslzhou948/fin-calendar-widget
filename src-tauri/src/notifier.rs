@@ -92,12 +92,14 @@ pub async fn notify_new_actuals(app: &AppHandle, fresh: &[CalendarEvent]) {
 
     let notified: HashSet<String> = state.cache_snapshot().notified_ids.into_iter().collect();
     let now = crate::now_sh();
-    // 先筛出真正要弹的（有 actual / 过阈值 / 未弹过 / 新鲜度窗口内）
+    // 先筛出真正要弹的（有 actual / 过阈值 / 在关注国家内 / 未弹过 / 新鲜度窗口内）
+    // 国家过滤：用户 2026-10-23 拍板——通知与面板同口径，没勾的国家不弹
     let eligible: Vec<&CalendarEvent> = fresh
         .iter()
         .filter(|ev| {
             ev.actual.is_some()
                 && ev.importance >= cfg.min_stars
+                && cfg.countries.iter().any(|c| c == ev.country.code())
                 && !notified.contains(&ev.id)
                 && is_fresh(ev, &now)
         })
@@ -198,6 +200,7 @@ pub async fn notify_due_events(app: &AppHandle) {
             && e.release_at <= now
             && e.release_at > window_start
             && e.importance >= cfg.min_stars
+            && cfg.countries.iter().any(|c| c == e.country.code())
             && !notified.contains(&e.id)
     }) {
         let body = match ev.status.as_deref() {

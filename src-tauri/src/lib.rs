@@ -40,6 +40,30 @@ pub(crate) fn now_sh() -> DateTime<Tz> {
 
 pub fn run() {
     tauri::Builder::default()
+        .on_window_event(|window, event| {
+            // 设置窗关闭回滚（清单 #13）：预览只改内存配置；窗口销毁后
+            // 若内存配置 != 已落盘配置，Rust 侧恢复 + 重定位 + 广播。
+            // 回滚必须走 Rust——旧做法在 JS 里拦截 CloseRequested、等
+            // IPC 后再 destroy，WebView2 上会把窗口拆成黑框僵尸
+            //（2026-10-23 真机实证：点 X 关不掉、取消后窗口内容变黑）。
+            if window.label() == "settings"
+                && matches!(event, tauri::WindowEvent::Destroyed)
+            {
+                let app = window.app_handle();
+                let state = app.state::<AppState>();
+                if state.rollback_preview() {
+                    // 应用退出时主窗可能已先销毁：不在场就只回滚内存，
+                    // 不做窗口操作与广播（QA 防御）
+                    if app.get_webview_window("main").is_some() {
+                        reposition_preserving_width(&app);
+                        let payload = build_widget_state(&state);
+                        if let Err(e) = app.emit("calendar-updated", payload) {
+                            eprintln!("[app] 设置关闭回滚广播失败: {e}");
+                        }
+                    }
+                }
+            }
+        })
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -305,6 +329,19 @@ fn open_settings(app: &AppHandle) {
         let _ = w.set_focus();
         return;
     }
+    // 兜底（QA M2）：极窄竞态下（关窗瞬间在途的 preview 在 Destroyed
+    // 回滚之后落地）内存可能残留未应用预览；新建窗口前再对账一次，
+    // 保证设置页打开时读到的就是落盘配置
+    {
+        let state = app.state::<AppState>();
+        if state.rollback_preview() {
+            reposition_preserving_width(app);
+            let payload = build_widget_state(&state);
+            if let Err(e) = app.emit("calendar-updated", payload) {
+                eprintln!("[app] 打开设置前回滚广播失败: {e}");
+            }
+        }
+    }
     if let Err(e) = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
         .title("设置 — 财经日历挂件")
         .inner_size(600.0, 680.0)
@@ -334,7 +371,7 @@ async fn get_config(state: State<'_, AppState>) -> Result<Config, String> {
 
 /// 设置页预览（清单 #7）：仅内存生效——换配置/重建数据源/主窗口即时
 /// 重渲染，但不落盘、不触发全量刷新。点「应用」走 set_config 落盘；
-/// 点「取消」/关窗时设置页以打开时快照再次调用本命令回滚。
+/// 未应用的预览在设置窗销毁时由 rollback_preview 回滚（清单 #13）。
 #[tauri::command]
 async fn preview_config(
     app: AppHandle,

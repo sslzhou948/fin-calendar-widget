@@ -287,8 +287,10 @@ async fn fire_due(app: &AppHandle, wakes: &mut Vec<(DateTime<Tz>, String)>) {
 /// 触发条件（同时满足才动作）：
 /// - 数据行（有 forecast/previous 任一）且 actual 为空
 /// - now >= event_time + 10min（给发布方留出更新时间，避开大事件流量高峰）
-/// - now <= event_time + 4h（太久远的不追，每周日全量刷新兜底）
-/// - 上次尝试在 30 分钟前（源故障时退避，不 hammer）
+/// - 分档退避（清单 #14）：发布后 10min–4h 为"年轻档"，30 分钟退避；
+///   超 4h 仍未填为"老年档"，2 小时退避、跟到本周结束——名义 00:00
+///   实际白天才落地的数据（2026-10-23 发电装机两条实证）靠年轻档
+///   永远捡不回来，老年档让常开应用也不必等重启对账/周一全量。
 ///
 /// 分流：
 /// - 缓存来自金十 → 重拉本周（actual 原生返回，data_id 幂等匹配回填）
@@ -301,14 +303,17 @@ async fn sweep_stale_actuals(app: &AppHandle) {
     let state = app.state::<AppState>();
     let now = now_sh();
 
-    // 退避：上次尝试 30 分钟内，跳过
-    if let Some(last) = state.last_actuals_sweep() {
-        if now.signed_duration_since(last) < Duration::minutes(30) {
-            return;
-        }
+    // 分档退避（清单 #14）：年轻档 30 分钟、老年档 2 小时
+    let since_last = state
+        .last_actuals_sweep()
+        .map(|l| now.signed_duration_since(l));
+    let young_due = since_last.map_or(true, |d| d >= Duration::minutes(30));
+    let old_due = since_last.map_or(true, |d| d >= Duration::hours(2));
+    if !young_due && !old_due {
+        return;
     }
 
-    // 找待回填事件（计数 + 所在周集合：周一凌晨时上周日的晚间事件仍在 4h 窗口内）
+    // 找待回填事件（计数 + 所在周集合：周一凌晨时上周日的晚间事件仍在窗口内）
     let (pending_count, pending_weeks): (usize, Vec<NaiveDate>) = {
         let cache = state.cache_snapshot();
         let mut weeks: Vec<NaiveDate> = Vec::new();
@@ -320,13 +325,22 @@ async fn sweep_stale_actuals(app: &AppHandle) {
                 continue;
             }
             let elapsed = now.signed_duration_since(e.release_at);
-            // 已过发布时间 10 分钟，且在 4 小时内
-            if elapsed >= Duration::minutes(10) && elapsed <= Duration::hours(4) {
-                count += 1;
-                let ws = schedule::week_monday(e.release_at.date_naive());
-                if !weeks.contains(&ws) {
-                    weeks.push(ws);
-                }
+            if elapsed < Duration::minutes(10) {
+                continue;
+            }
+            // 年轻档（≤4h）与老年档（>4h）各按自己的退避到期才纳入
+            let in_scope = if elapsed <= Duration::hours(4) {
+                young_due
+            } else {
+                old_due
+            };
+            if !in_scope {
+                continue;
+            }
+            count += 1;
+            let ws = schedule::week_monday(e.release_at.date_naive());
+            if !weeks.contains(&ws) {
+                weeks.push(ws);
             }
         }
         (count, weeks)
@@ -359,7 +373,7 @@ async fn sweep_stale_actuals(app: &AppHandle) {
             )
             .await;
             if outcome.from_cache {
-                eprintln!("[scheduler] 金十重拉失败（全链兜底缓存），30 分钟后重试");
+                eprintln!("[scheduler] 金十重拉失败（全链兜底缓存），稍后按退避重试");
                 continue;
             }
             let newly = state.apply_actuals(&outcome.events);
@@ -380,7 +394,7 @@ async fn sweep_stale_actuals(app: &AppHandle) {
     let client = caldata::source::shared_client();
     let actual_map = caldata::forexfactory_actuals::fetch_actual_map(client).await;
     if actual_map.is_empty() {
-        eprintln!("[scheduler] FF 抓取为空，30 分钟后重试");
+        eprintln!("[scheduler] FF 抓取为空，稍后按退避重试");
         return;
     }
 
@@ -397,7 +411,9 @@ async fn sweep_stale_actuals(app: &AppHandle) {
                 continue;
             }
             let elapsed = now.signed_duration_since(ev.release_at);
-            if elapsed < Duration::minutes(10) || elapsed > Duration::hours(4) {
+            // 与待回填判定同口径的老年档（#14），但加 7 天硬顶：缓存只有
+            // 本周事件、正常到不了；防跨周同名事件被 FF 本周页误填（QA）
+            if elapsed < Duration::minutes(10) || elapsed > Duration::days(7) {
                 continue;
             }
             // 用 fill_actuals 的匹配逻辑（复用）
@@ -421,6 +437,9 @@ async fn sweep_stale_actuals(app: &AppHandle) {
     if !filled_events.is_empty() {
         eprintln!("[scheduler] 回填 {} 条实际值", filled_events.len());
         crate::notifier::notify_new_actuals(app, &filled_events).await;
+        // 回填结果落盘（QA M5）：否则未触发通知的回填（老年档居多）
+        // 只活在内存里，重启后要靠启动对账重新抓一遍
+        state.persist_cache_now();
     }
     emit_updated(app);
 }

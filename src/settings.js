@@ -275,17 +275,15 @@
 
   function init() {
     buildCountryChecks();
-    var snapshot = null;   /* 打开设置时的配置快照（清单 #7 取消回滚用） */
-    var closingIntentional = false;   /* 取消按钮主动关窗标记，防二次回滚 */
     /* 竞态护栏（QA G2 Major）：配置加载完成前锁定表单——否则用户抢先
-       编辑/点应用，readForm 读到的是 HTML 静态默认，会把默认配置
-       覆盖落盘、或在回调返回时被 fillForm 冲掉正在改的内容。 */
+       编辑触发的预览会把 HTML 静态默认当配置应用到主窗，或在回调
+       返回时被 fillForm 冲掉正在改的内容。回滚不再归 JS 管（清单
+       #13）：关窗后 Rust 对比内存/落盘配置自动恢复未应用的预览。 */
     var wrapEl = document.querySelector('.s-wrap');
     if (wrapEl) { wrapEl.style.pointerEvents = 'none'; wrapEl.style.opacity = '0.55'; }
     loadConfig().then(function (cfg) {
       var shown = cfg || DEFAULT_CONFIG;
       fillForm(shown);
-      snapshot = JSON.parse(JSON.stringify(Object.assign({}, DEFAULT_CONFIG, shown)));
       if (wrapEl) { wrapEl.style.pointerEvents = ''; wrapEl.style.opacity = ''; }
     });
 
@@ -327,14 +325,6 @@
       wrapEl.addEventListener('change', schedulePreview);
     }
 
-    async function restoreSnapshot() {
-      if (!snapshot) return;
-      fillForm(snapshot);
-      if (isTauri()) {
-        try { await T.core.invoke('preview_config', { config: snapshot }); } catch (e) { /* 忽略 */ }
-      }
-    }
-
     async function closeSettings() {
       if (isTauri() && T.window && T.window.getCurrentWindow) {
         try { await T.window.getCurrentWindow().close(); return; } catch (e) { /* 落到 window.close */ }
@@ -346,7 +336,6 @@
       var cfg = readForm();
       try {
         await saveConfig(cfg);
-        snapshot = cfg;
         var tip = el('saveTip');
         tip.hidden = false;
         setTimeout(function () { tip.hidden = true; }, 2000);
@@ -355,25 +344,12 @@
       }
     });
 
-    el('cancelBtn').addEventListener('click', async function () {
-      closingIntentional = true;   /* 已在此回滚，关窗拦截器不要重复 */
-      await restoreSnapshot();
+    /* 取消 = 直接关窗（清单 #13）：未应用的预览由 Rust 在窗口销毁
+       事件里回滚，JS 不拦截关闭——旧拦截流程在 WebView2 上会把
+       窗口拆成黑框僵尸（真机实证）。X 按钮同理走原生关闭。 */
+    el('cancelBtn').addEventListener('click', function () {
       closeSettings();
     });
-
-    /* 关窗（X）= 取消：拦截关闭，先回滚未应用的预览，再销毁窗口 */
-    if (isTauri() && T.window && T.window.getCurrentWindow) {
-      try {
-        var cw = T.window.getCurrentWindow();
-        cw.onCloseRequested(async function (event) {
-          event.preventDefault();
-          if (!closingIntentional) {
-            await restoreSnapshot();
-          }
-          try { await cw.destroy(); } catch (e) { /* 已关闭 */ }
-        }).catch(function () { /* 注册失败忽略，不阻断设置页 */ });
-      } catch (e) { /* 忽略 */ }
-    }
   }
 
   if (document.readyState === 'loading') {
