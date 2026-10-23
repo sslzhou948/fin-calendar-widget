@@ -13,8 +13,13 @@ chrono-tz = "0.9"
 # json：Faireconomy 源用 resp.json() 解析
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 scraper = "0.20"
-tokio = { version = "1", features = ["rt", "macros", "time"] }
+tokio = { version = "1", features = ["rt", "macros", "time", "net", "sync"] }
 async-trait = "0.1"
+# 金十 WebSocket 源（jin10.rs）：rustls 与 reqwest 同栈，避免 native-tls/openssl
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+base64 = "0.22"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros", "time"] }
