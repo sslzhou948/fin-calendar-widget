@@ -16,6 +16,7 @@ pub mod faireconomy;
 pub mod forexfactory_actuals;
 pub mod investing_backup;
 pub mod investing_primary;
+pub mod jin10;
 pub mod mapping;
 pub mod model;
 pub mod schedule;
