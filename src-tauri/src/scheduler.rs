@@ -1,7 +1,7 @@
 //! 刷新调度：零轮询，全部用 tokio::time::sleep 精确到点触发（TECH-DESIGN §4）。
 //!
 //! 四类任务：
-//! ① 每周日 00:00（Asia/Shanghai）全量 `fetch_week`（`schedule::next_sunday_midnight`）；
+//! ① 每周一 10:00（Asia/Shanghai）全量 `fetch_week`（`schedule::next_weekly_refresh`，清单 #11）；
 //! ② 启动时 `reconcile()`：covered_week 过期 → 全量补拉；已过发布时间但 actual 为空 → 补拉；
 //! ③ 事件驱动唤醒：`schedule::build_wake_list()` → 每事件 release_at+2min 到点刷新 actual。
 //! 唤醒时间表在"全量刷新 / 配置变更 / 对账"后重建（经 `AppState::request_rebuild` 信号）。
@@ -10,7 +10,7 @@
 //! 覆盖两种缺口：③ 那次拉取失败（全链源都挂），或数据源公布延迟（+2min 时还没出数）。
 //!
 //! 拉取统一走 `caldata::source::fetch_week_with_fallback`（金十 → Faireconomy →
-//! InvestingBackup → 本地缓存），
+//! 本地缓存），
 //! `FetchOutcome.from_cache` 为 true 时表示全链失败、兜底用了缓存。
 
 use std::time::Duration;
@@ -27,18 +27,23 @@ use crate::{build_widget_state, now_sh};
 
 /// 启动全部后台调度任务。wake_rx 由 `AppState::load` 创建（重建信号接收端）。
 pub fn spawn(app: AppHandle, wake_rx: tokio::sync::mpsc::Receiver<()>) {
-    // ① 启动对账：补上关机期间错过的整周刷新与事件 actual（异步，不阻塞窗口显示）
+    // ① 启动：无条件全量刷新一次（清单 #9b——金十整周拉取仅约 1.6s，
+    // 不再为省请求走"缓存没过期就不联网"，保证每次打开都是最新数据、
+    // 实际值齐全）；全链失败（如断网）时再走对账补拉兜底。
     let app1 = app.clone();
     tauri::async_runtime::spawn(async move {
-        reconcile(&app1).await;
+        let outcome = full_refresh(&app1).await;
+        if outcome.from_cache {
+            reconcile(&app1, true).await;
+        }
     });
 
-    // ② 每周日 00:00 全量刷新
+    // ② 每周一 10:00 全量刷新（锚点选择见清单 #11）
     let app2 = app.clone();
     tauri::async_runtime::spawn(async move {
         loop {
             let now = now_sh();
-            let next = schedule::next_sunday_midnight(now);
+            let next = schedule::next_weekly_refresh(now);
             let wait = (next - now).to_std().unwrap_or(Duration::from_secs(60));
             eprintln!(
                 "[scheduler] 下次全量刷新: {}",
@@ -47,7 +52,7 @@ pub fn spawn(app: AppHandle, wake_rx: tokio::sync::mpsc::Receiver<()>) {
             tokio::time::sleep(wait).await;
             let outcome = full_refresh(&app2).await;
             if outcome.from_cache {
-                // 有界重试：失败后每小时重抓，最多 3 次；仍失败则等下周日。
+                // 有界重试：失败后每小时重抓，最多 3 次；仍失败则等下周一。
                 // （"周日关机错过"由开机对账覆盖；这里防"开着机但那一刻网络抖动"）
                 for i in 1..=3u32 {
                     tokio::time::sleep(Duration::from_secs(3600)).await;
@@ -56,7 +61,7 @@ pub fn spawn(app: AppHandle, wake_rx: tokio::sync::mpsc::Receiver<()>) {
                         break;
                     }
                     if i == 3 {
-                        eprintln!("[scheduler] 重试 3 次仍失败，等下周日");
+                        eprintln!("[scheduler] 重试 3 次仍失败，等下周一");
                     }
                 }
             }
@@ -79,7 +84,7 @@ pub fn spawn(app: AppHandle, wake_rx: tokio::sync::mpsc::Receiver<()>) {
 }
 
 /// 启动时对账（TECH-DESIGN §4.2）
-async fn reconcile(app: &AppHandle) {
+async fn reconcile(app: &AppHandle, full_already_tried: bool) {
     let state = app.state::<AppState>();
     let now = now_sh();
 
@@ -88,6 +93,13 @@ async fn reconcile(app: &AppHandle) {
         Some(covered) => schedule::needs_refresh(covered, now),
     };
     if need_full {
+        if full_already_tried {
+            // 启动全量刚失败过（多半断网）：不再把整条失败链重跑一遍，
+            // 等网络恢复后的事件驱动/sweep 或下次启动（QA G5 Minor）
+            eprintln!("[scheduler] 启动全量已失败，跳过对账重复全量");
+            state.request_rebuild();
+            return;
+        }
         eprintln!("[scheduler] covered_week 缺失/过期，启动时全量补拉");
         full_refresh(app).await;
         return;
@@ -120,7 +132,6 @@ async fn reconcile(app: &AppHandle) {
         let outcome = fetch_week_with_fallback(
             &sources.primary,
             &sources.secondary,
-            &sources.backup,
             cfg.to_source_mode(),
             ws,
             None,
@@ -152,7 +163,6 @@ pub async fn full_refresh(app: &AppHandle) -> caldata::source::FetchOutcome {
     let outcome = fetch_week_with_fallback(
         &sources.primary,
         &sources.secondary,
-        &sources.backup,
         cfg.to_source_mode(),
         week_start,
         Some(cache_events),
@@ -255,7 +265,6 @@ async fn fire_due(app: &AppHandle, wakes: &mut Vec<(DateTime<Tz>, String)>) {
         let outcome = fetch_week_with_fallback(
             &sources.primary,
             &sources.secondary,
-            &sources.backup,
             cfg.to_source_mode(),
             ws,
             None,
@@ -344,8 +353,7 @@ async fn sweep_stale_actuals(app: &AppHandle) {
             let outcome = fetch_week_with_fallback(
                 &sources.primary,
                 &sources.secondary,
-                &sources.backup,
-                cfg.to_source_mode(),
+                    cfg.to_source_mode(),
                 ws,
                 None,
             )
@@ -439,8 +447,6 @@ pub(crate) fn describe_used(used: Option<Source>) -> &'static str {
     match used {
         Some(Source::Jin10) => "jin10",
         Some(Source::Faireconomy) => "faireconomy",
-        Some(Source::Primary) => "primary",
-        Some(Source::Backup) => "backup",
         None => "缓存兜底",
     }
 }
