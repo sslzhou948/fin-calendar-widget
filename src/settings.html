@@ -9,7 +9,7 @@
 <body class="settings">
 <div class="s-wrap">
   <h1>财经日历 · 设置</h1>
-  <p class="desc">修改后点「保存」即时生效（Tauri 内写入后端配置，浏览器预览模式写入 localStorage）。</p>
+  <p class="desc">改动会立即在挂件上预览；点「应用」保存，点「取消」恢复打开设置时的状态。</p>
 
   <div class="s-card">
     <h2>国家 / 地区</h2>
@@ -35,9 +35,17 @@
     </div>
     <div class="s-row">
       <span class="name">面板宽度</span>
-      <input type="range" id="panelWidth" min="25" max="75" step="1" value="42">
-      <span class="range-val" id="panelWidthVal">42%</span>
-      <span class="note" style="color:var(--muted);font-size:12px">占屏幕宽度的百分比（默认 42%，原固定 50% 上限已放开）</span>
+      <label class="item"><input type="radio" name="widthMode" value="auto" checked> 自适应（按内容列数）</label>
+      <label class="item"><input type="radio" name="widthMode" value="manual"> 手动列数</label>
+      <select id="manualColumns">
+        <option value="1">1 列</option>
+        <option value="2">2 列</option>
+        <option value="3">3 列</option>
+        <option value="4">4 列</option>
+        <option value="5">5 列</option>
+        <option value="6">6 列</option>
+      </select>
+      <span class="note" style="color:var(--muted);font-size:12px">高度恒占满屏幕；宽度按整列计算，不会出现半列</span>
     </div>
     <div class="s-row">
       <span class="name">字号</span>
@@ -54,13 +62,16 @@
       <div class="hint">数值越高背景越实，文字越清晰（默认 70%）</div>
     </div>
     <div class="s-row">
-      <label class="item"><input type="checkbox" id="notify" checked> 数据公布系统通知（默认开）</label>
+      <label class="item"><input type="checkbox" id="notify" checked> 数据公布通知（实际值出来时，默认开）</label>
+    </div>
+    <div class="s-row">
+      <label class="item"><input type="checkbox" id="autostart" checked> 开机自启动（默认开；关闭后不再自动随系统启动）</label>
     </div>
     <div class="s-row">
       <label class="item"><input type="checkbox" id="usdMode"> 美元口径利多利空着色（默认关）</label>
     </div>
     <div class="s-row">
-      <label class="item"><input type="checkbox" id="notifyEvents"> 事件类通知（默认关）</label>
+      <label class="item"><input type="checkbox" id="notifyEvents"> 事件到点提醒（讲话·会议类，默认关，与数据通知互相独立）</label>
     </div>
     <div class="s-row">
       <label class="item"><input type="checkbox" id="hideHolidays"> 隐藏假期行（默认关）</label>
@@ -68,9 +79,8 @@
     <div class="s-row">
       <span class="name">数据源</span>
       <select id="source">
-        <option value="auto" selected>自动（金十 → Faireconomy → Investing 降级）</option>
-        <option value="primary">主数据源（金十）</option>
-        <option value="backup">备用数据源（Investing）</option>
+        <option value="auto" selected>自动（金十 → Faireconomy 降级）</option>
+        <option value="primary">主数据源（仅金十）</option>
       </select>
     </div>
   </div>
@@ -114,8 +124,9 @@
   </div>
 
   <div class="s-btns">
-    <button class="btn primary" id="saveBtn">保存</button>
-    <span id="saveTip" hidden>已保存 ✓</span>
+    <button class="btn primary" id="applyBtn">应用</button>
+    <button class="btn" id="cancelBtn">取消</button>
+    <span id="saveTip" hidden>已应用 ✓</span>
   </div>
 </div>
 <script src="settings.js"></script>
