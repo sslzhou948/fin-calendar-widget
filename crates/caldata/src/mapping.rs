@@ -1,19 +1,10 @@
-//! 映射表：国家 / 重要性 3→5 星 / 利多利空方向 / 宽容数值解析。
+//! 映射表：国家 / 利多利空方向 / 宽容数值解析。
 //!
-//! 全部可配置、可单测。凡未经 live 核对的一律标注 UNVERIFIED。
+//! 全部可配置、可单测。
 
 use serde::{Deserialize, Serialize};
 
 use crate::model::Country;
-
-/// Investing `countries` 请求参数的默认数字 ID 列表。
-///
-/// 来源：POC 阶段从日历页面抓到的默认列表。
-/// ⚠️ UNVERIFIED：仅 `5=美国` 经社区文档确认，其余 ID ↔ 国家的对应关系
-/// 须在开发环境从日历页面核对一次。解析时优先走货币代码
-/// （[`Country::from_currency`]），此表只做请求参数的补充。
-pub const DEFAULT_COUNTRY_IDS: &str =
-    "37,46,6,110,14,48,32,17,10,36,43,35,72,22,41,25,12,5,4,26,178,11,39,42";
 
 impl Country {
     /// 优先的国家映射：货币代码 → 国家。
@@ -35,20 +26,7 @@ impl Country {
         }
     }
 
-    /// 数字 ID → 国家（补充映射）。
-    ///
-    /// ⚠️ UNVERIFIED：社区文档确认的只有 `5=美国`；其余 ID 待开发环境核对，
-    /// 在此之前一律返回 `None`（调用方回退为 [`Country::Other`]）。
-    pub fn from_numeric_id(id: u32) -> Option<Self> {
-        match id {
-            5 => Some(Country::US), // 社区文档确认
-            _ => None,              // UNVERIFIED：待开发环境从页面核对
-        }
-    }
-
-    /// 国家名（中/英文）→ 国家。用于 Backup JSON 源的 `country` 字段。
-    ///
-    /// 匹配前会转小写 + 去首尾空白。未知 → [`Country::Other`]。
+    /// 国家名（中/英文）→ 国家。匹配前会转小写 + 去首尾空白。未知 → [`Country::Other`]。
     pub fn from_name(name: &str) -> Self {
         let n = name.trim().to_lowercase();
         // 英文名
@@ -80,43 +58,6 @@ impl Country {
             "加拿大" => Country::CA,
             "瑞士" => Country::CH,
             _ => Country::Other,
-        }
-    }
-}
-
-/// 重要性 3 档（Investing：1 低 / 2 中 / 3 高）→ 内部 5 星制。
-///
-/// 默认 `{1:1, 2:3, 3:5}`。
-/// ⚠️ **用一周真实数据校准**：重点看 3 星线附近（Investing 2 档中偏上 / 3 档中偏下）
-/// 的事件是否合理，再微调本结构体的字段。可经配置注入，无需改代码。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ImportanceMap {
-    /// Investing 1 档（低）→ 星数
-    pub low: u8,
-    /// Investing 2 档（中）→ 星数
-    pub mid: u8,
-    /// Investing 3 档（高）→ 星数
-    pub high: u8,
-}
-
-impl Default for ImportanceMap {
-    fn default() -> Self {
-        Self {
-            low: 1,
-            mid: 3,
-            high: 5,
-        }
-    }
-}
-
-impl ImportanceMap {
-    /// `level` 为 1..=3；越界返回 `None`（调用方应跳过该行）。
-    pub fn stars(&self, level: u8) -> Option<u8> {
-        match level {
-            1 => Some(self.low),
-            2 => Some(self.mid),
-            3 => Some(self.high),
-            _ => None,
         }
     }
 }
@@ -270,15 +211,6 @@ mod tests {
     }
 
     #[test]
-    fn numeric_id_only_verified_five() {
-        assert_eq!(Country::from_numeric_id(5), Some(Country::US));
-        // 其余 UNVERIFIED，一律 None
-        assert_eq!(Country::from_numeric_id(6), None);
-        assert_eq!(Country::from_numeric_id(37), None);
-        assert_eq!(Country::from_numeric_id(110), None);
-    }
-
-    #[test]
     fn name_mapping_cn_en() {
         assert_eq!(Country::from_name("United States"), Country::US);
         assert_eq!(Country::from_name("美国"), Country::US);
@@ -297,28 +229,6 @@ mod tests {
         assert_eq!(Country::from_name("Switzerland"), Country::CH);
         assert_eq!(Country::from_name("南非"), Country::Other);
         assert_eq!(Country::from_name("South Africa"), Country::Other);
-    }
-
-    #[test]
-    fn importance_default_mapping() {
-        let m = ImportanceMap::default();
-        assert_eq!(m.stars(1), Some(1));
-        assert_eq!(m.stars(2), Some(3));
-        assert_eq!(m.stars(3), Some(5));
-        assert_eq!(m.stars(0), None);
-        assert_eq!(m.stars(4), None);
-    }
-
-    #[test]
-    fn importance_configurable() {
-        let m = ImportanceMap {
-            low: 2,
-            mid: 3,
-            high: 4,
-        };
-        assert_eq!(m.stars(1), Some(2));
-        assert_eq!(m.stars(2), Some(3));
-        assert_eq!(m.stars(3), Some(4));
     }
 
     #[test]
