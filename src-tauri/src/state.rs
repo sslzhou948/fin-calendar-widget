@@ -2,17 +2,14 @@
 //!
 //! - 配置：`app_data_dir/config.json`（TECH-DESIGN §8）
 //! - 缓存：`app_data_dir/cache.json`（covered_week、事件、已通知 id 集合，§4.2 对账依据）
-//! - 数据源：`Jin10`（主）/ `Faireconomy`（备一）/ `InvestingBackup`（备二）三路实例，
-//!   配置变更（importance_map）时重建。
+//! - 数据源：`Jin10`（主）/ `Faireconomy`（备）两路实例（v0.2 起），
+//!   配置变更时重建。
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 use caldata::faireconomy::Faireconomy;
-use caldata::investing_backup::InvestingBackup;
 use caldata::jin10::Jin10;
-use caldata::mapping::ImportanceMap;
 use caldata::model::CalendarEvent;
 use caldata::source::{SourceError, SourceMode};
 use chrono::DateTime;
@@ -45,13 +42,14 @@ fn default_false() -> bool {
 fn default_source() -> String {
     "auto".to_string()
 }
-/// Investing 3 档重要性 → 5 星映射（TECH-DESIGN §3.3），PRD 要求用一周真实数据校准。
-/// JSON 中形如 {"1":1,"2":3,"3":5}。
-fn default_importance_map() -> HashMap<u8, u8> {
-    [(1u8, 1u8), (2u8, 3u8), (3u8, 5u8)].into_iter().collect()
-}
 fn default_panel_width_pct() -> u8 {
     42
+}
+fn default_width_mode() -> String {
+    "auto".to_string()
+}
+fn default_manual_columns() -> u8 {
+    3
 }
 fn default_frost_opacity() -> u8 {
     70
@@ -133,13 +131,14 @@ pub struct Config {
     /// 数据公布系统通知，默认开
     #[serde(default = "default_true")]
     pub notifications: bool,
-    /// 数据源："auto" | "primary" | "backup"
+    /// 开机自启动，默认开（清单 #9a；v0.2 前为无条件强制自启、无开关）
+    #[serde(default = "default_true")]
+    pub autostart: bool,
+    /// 数据源："auto" | "primary"（v0.2 起；旧值 "backup" 已随 Investing
+    /// 删除而失效，to_source_mode 会把它归一到 Auto，validate 仍放行以
+    /// 兼容老配置，设置页保存时写回新值）
     #[serde(default = "default_source")]
     pub source: String,
-    /// 重要性 3 档 → 5 星映射表，可配置；本壳在构造数据源时转换为
-    /// `caldata::mapping::ImportanceMap` 经 `with_importance()` 注入。
-    #[serde(default = "default_importance_map")]
-    pub importance_map: HashMap<u8, u8>,
     /// 美元口径利多/利空着色（设置可选项），默认关闭（默认用中性预期差着色）
     #[serde(default = "default_false")]
     pub usd_mode: bool,
@@ -149,9 +148,16 @@ pub struct Config {
     /// 隐藏假期行，默认关闭
     #[serde(default = "default_false")]
     pub hide_holidays: bool,
-    /// 面板宽度占屏幕宽度的百分比，25–75，默认 42（设置页滑杆可调）
+    /// 面板宽度占屏幕宽度的百分比，25–75，默认 42（v0.2 起退役：
+    /// 宽度改由 width_mode/manual_columns 决定，本字段仅保留反序列化兼容）
     #[serde(default = "default_panel_width_pct")]
     pub panel_width_pct: u8,
+    /// 宽度模式："auto"（按内容列数自适应，默认）| "manual"（固定列数）
+    #[serde(default = "default_width_mode")]
+    pub width_mode: String,
+    /// 手动模式列数 1–6，默认 3
+    #[serde(default = "default_manual_columns")]
+    pub manual_columns: u8,
     /// 毛玻璃背景不透明度 0–100，默认 70（设置页滑杆可调）
     #[serde(default = "default_frost_opacity")]
     pub frost_opacity: u8,
@@ -169,12 +175,14 @@ impl Default for Config {
             font_size: default_font_size(),
             frosted: default_true(),
             notifications: default_true(),
+            autostart: default_true(),
             source: default_source(),
-            importance_map: default_importance_map(),
             usd_mode: default_false(),
             notify_events: default_false(),
             hide_holidays: default_false(),
             panel_width_pct: default_panel_width_pct(),
+            width_mode: default_width_mode(),
+            manual_columns: default_manual_columns(),
             frost_opacity: default_frost_opacity(),
             colors: ColorTheme::default(),
         }
@@ -201,6 +209,12 @@ impl Config {
         if !(25..=75).contains(&self.panel_width_pct) {
             return Err("panel_width_pct 必须在 25–75 之间".to_string());
         }
+        if ![\"auto\", \"manual\"].contains(&self.width_mode.as_str()) {
+            return Err(\"width_mode 只能是 auto / manual\".to_string());
+        }
+        if !(1..=6).contains(&self.manual_columns) {
+            return Err(\"manual_columns 必须在 1–6 之间\".to_string());
+        }
         if self.frost_opacity > 100 {
             return Err("frost_opacity 必须在 0–100 之间".to_string());
         }
@@ -208,21 +222,12 @@ impl Config {
         Ok(())
     }
 
-    /// 配置字符串 → caldata 的数据源模式
+    /// 配置字符串 → caldata 的数据源模式。
+    /// 旧值 "backup"（Investing 已删）归一到 Auto（清单 #8 兼容迁移）。
     pub fn to_source_mode(&self) -> SourceMode {
         match self.source.as_str() {
             "primary" => SourceMode::PrimaryOnly,
-            "backup" => SourceMode::BackupOnly,
             _ => SourceMode::Auto,
-        }
-    }
-
-    /// 配置映射表 → caldata::mapping::ImportanceMap（缺键回退默认值）
-    pub fn to_importance_map(&self) -> ImportanceMap {
-        ImportanceMap {
-            low: self.importance_map.get(&1).copied().unwrap_or(1),
-            mid: self.importance_map.get(&2).copied().unwrap_or(3),
-            high: self.importance_map.get(&3).copied().unwrap_or(5),
         }
     }
 }
@@ -244,20 +249,17 @@ pub struct Cache {
     pub last_error: Option<String>,
 }
 
-/// 三路数据源实例（金十 WS / Faireconomy / InvestingBackup）
-/// primary = Faireconomy（公开 JSON，免反爬）；backup = Investing 社区接口。
+/// 两路数据源实例（v0.2）：primary = 金十 WS（主），secondary = Faireconomy（备）。
 pub struct Sources {
     pub primary: Jin10,
     pub secondary: Faireconomy,
-    pub backup: InvestingBackup,
 }
 
 impl Sources {
-    pub fn build(importance: &ImportanceMap) -> Result<Self, SourceError> {
+    pub fn build() -> Result<Self, SourceError> {
         Ok(Self {
             primary: Jin10::new()?,
             secondary: Faireconomy::new()?,
-            backup: InvestingBackup::new()?.with_importance(*importance),
         })
     }
 }
@@ -278,7 +280,7 @@ impl AppState {
     pub fn load(dir: PathBuf) -> Result<(Self, tokio::sync::mpsc::Receiver<()>), SourceError> {
         let config = read_json::<Config>(&dir.join(CONFIG_FILE));
         let cache = read_json::<Cache>(&dir.join(CACHE_FILE));
-        let sources = Arc::new(Sources::build(&config.to_importance_map())?);
+        let sources = Arc::new(Sources::build()?);
         let (tx, rx) = tokio::sync::mpsc::channel(1);
         Ok((
             Self {
@@ -321,11 +323,23 @@ impl AppState {
         self.sources.read().unwrap().clone()
     }
 
-    /// 保存配置：先重建数据源（importance_map 可能变），再落盘 + 更新内存。
-    /// 调用方须先完成 `Config::validate()`。
+    /// 仅内存生效（设置页预览，清单 #7）：换配置 + 重建数据源，**不落盘**。
+    /// 「应用」走 save_config；「取消」由设置页以快照再次调用本方法回滚。
+    pub fn apply_config(&self, config: Config) -> Result<(), String> {
+        let sources = Arc::new(
+            Sources::build()
+                .map_err(|e| format!("数据源初始化失败: {e}"))?,
+        );
+        *self.config.write().unwrap() = config;
+        *self.sources.write().unwrap() = sources;
+        Ok(())
+    }
+
+    /// 落盘保存：写 config.json + 内存生效（顺序与旧实现一致：
+    /// 先构建数据源、先写盘、再换内存，避免失败时盘/内存不一致扩大）。
     pub fn save_config(&self, config: Config) -> Result<(), String> {
         let sources = Arc::new(
-            Sources::build(&config.to_importance_map())
+            Sources::build()
                 .map_err(|e| format!("数据源初始化失败: {e}"))?,
         );
         write_json(&self.dir.join(CONFIG_FILE), &config)?;
@@ -388,6 +402,11 @@ impl AppState {
                         newly.push(cached.clone());
                     }
                 }
+            }
+            if !newly.is_empty() {
+                // 回填也是数据更新："数据截至"（清单 #12）须跟着走，
+                // 否则刚公布完页脚还显示旧时间
+                cache.updated_at = Some(crate::now_sh().format("%Y-%m-%d %H:%M:%S").to_string());
             }
         }
         if !newly.is_empty() {
