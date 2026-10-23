@@ -313,6 +313,37 @@ impl Jin10 {
     pub fn new() -> Result<Self, SourceError> {
         Ok(Self)
     }
+
+    /// 拉取指定日期集合并映射为事件（排序，不做空校验——
+    /// 空校验是整周拉取的语义，单日探活允许 0 条）。
+    async fn fetch_dates(
+        &self,
+        dates: &[NaiveDate],
+    ) -> Result<Vec<CalendarEvent>, SourceError> {
+        let items = tokio::time::timeout(SESSION_TIMEOUT, fetch_week_items(dates))
+            .await
+            .map_err(|_| SourceError::Network("金十拉取超时（30s）".into()))??;
+        let mut events: Vec<CalendarEvent> = Vec::with_capacity(items.len());
+        for (subtype, item) in &items {
+            let ev = if *subtype == SUBTYPE_INDICATORS {
+                map_indicator(item)
+            } else {
+                map_event(item)
+            };
+            if let Some(ev) = ev {
+                events.push(ev);
+            }
+        }
+        events.sort_by_key(|e| e.release_at);
+        Ok(events)
+    }
+
+    /// 轻量探活（接口测试用，清单 #10）：完整握手/登录，但只拉一天
+    /// （2 个请求），返回当日条数。会话能跑通协议即证明连通，
+    /// 避免每次点测试都全量拉整周、徒增平台风控风险。
+    pub async fn probe(&self, date: NaiveDate) -> Result<usize, SourceError> {
+        Ok(self.fetch_dates(&[date]).await?.len())
+    }
 }
 
 /// 每次连接生成一个 machineId（POC 验证随机值可行；官方客户端为持久
@@ -335,24 +366,10 @@ impl DataSource for Jin10 {
         let dates: Vec<NaiveDate> = (0..7)
             .map(|i| week_start + chrono::Duration::days(i))
             .collect();
-        let items = tokio::time::timeout(SESSION_TIMEOUT, fetch_week_items(&dates))
-            .await
-            .map_err(|_| SourceError::Network("金十整周拉取超时（30s）".into()))??;
-        let mut events: Vec<CalendarEvent> = Vec::with_capacity(items.len());
-        for (subtype, item) in &items {
-            let ev = if *subtype == SUBTYPE_INDICATORS {
-                map_indicator(item)
-            } else {
-                map_event(item)
-            };
-            if let Some(ev) = ev {
-                events.push(ev);
-            }
-        }
+        let events = self.fetch_dates(&dates).await?;
         if events.is_empty() {
             return Err(SourceError::Empty("金十整周返回 0 条".into()));
         }
-        events.sort_by_key(|e| e.release_at);
         Ok(events)
     }
 }
