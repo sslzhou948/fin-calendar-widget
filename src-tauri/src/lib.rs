@@ -4,15 +4,12 @@
 //! 数据获取 / 解析 / 映射 / 调度纯函数全部在 `caldata` crate，本壳只做编排。
 //!
 //! 调用的 caldata 公开 API（`crates/caldata/src/lib.rs` 有再导出）：
-//! - `caldata::faireconomy::Faireconomy::new()`
-//! - `caldata::investing_backup::InvestingBackup::new()` / `.with_importance()`
+//! - `caldata::jin10::Jin10::new()` / `caldata::faireconomy::Faireconomy::new()`
 //! - `caldata::source::{DataSource::fetch_week, fetch_week_with_fallback,
 //!   SourceMode, FetchOutcome, SourceError}`
-//! - `caldata::schedule::{TZ, next_sunday_midnight, needs_refresh,
+//! - `caldata::schedule::{TZ, next_weekly_refresh, needs_refresh,
 //!   build_wake_list, week_monday, weekday_cn}`
 //! - `caldata::model::{CalendarEvent, Country::code(), Source}`
-//! - `caldata::mapping::ImportanceMap { low, mid, high }`
-//!   （本壳 `Config.importance_map` 经 `Config::to_importance_map()` 转换后注入）
 
 mod notifier;
 mod scheduler;
@@ -21,7 +18,6 @@ mod state;
 use std::time::Duration;
 
 use caldata::faireconomy::Faireconomy;
-use caldata::investing_backup::InvestingBackup;
 use caldata::jin10::Jin10;
 use caldata::model::Source;
 use caldata::schedule::{self, TZ};
@@ -75,11 +71,15 @@ pub fn run() {
                 });
             }
 
-            // 开机自启（best-effort，失败只打日志不阻断启动）
+            // 开机自启（清单 #9a）：按配置同步——关了就注销，不再像
+            // v0.1 那样每次启动无条件强制注册（best-effort，失败只打日志）
             {
                 use tauri_plugin_autostart::ManagerExt;
-                if let Err(e) = app.handle().autolaunch().enable() {
-                    eprintln!("[app] 开机自启开启失败: {e}");
+                let want = app.state::<AppState>().config_snapshot().autostart;
+                let mgr = app.handle().autolaunch();
+                let res = if want { mgr.enable() } else { mgr.disable() };
+                if let Err(e) = res {
+                    eprintln!("[app] 开机自启同步失败: {e}");
                 }
             }
 
@@ -91,6 +91,8 @@ pub fn run() {
             get_state,
             get_config,
             set_config,
+            preview_config,
+            set_panel_width,
             test_sources,
             test_actuals,
             refresh_now
@@ -101,31 +103,63 @@ pub fn run() {
 
 // ---------------- 窗口与托盘 ----------------
 
-/// 主窗口定位：主显示器工作区按配置宽度（panel_width_pct，默认 42%）贴边，
-/// 或按配置切左/右半屏；随后开启点击穿透（TECH-DESIGN §5）。
-fn position_main_window(app: &AppHandle) {
-    let Some(win) = app.get_webview_window("main") else {
-        return;
-    };
-    let cfg = app.state::<AppState>().config_snapshot();
-    let side = cfg.side;
-    let pct = cfg.panel_width_pct.clamp(25, 75) as f64 / 100.0;
-    // 主显示器工作区（排除任务栏）；取不到则回退 1920x1080
-    let (wx, wy, ww, wh) = match app.primary_monitor().ok().flatten() {
+/// 按列数计算窗口宽度（物理 px）。几何与 styles.css 对齐：面板横向
+/// 内边距 2×1.1em + 边框 2px、列间隔 1.6em（`em_px` = font_size × DPI
+/// 缩放）。**全程浮点、总量向上取整**：逐分量取整会在默认字号下产生
+/// 负误差、静默吞掉最后一列（QA B1），禁止改回整数分量公式。
+fn width_for_columns(em_px: f64, col_w: u32, cols: u32) -> u32 {
+    let total = 2.2 * em_px + 2.0
+        + cols as f64 * col_w as f64
+        + cols.saturating_sub(1) as f64 * 1.6 * em_px;
+    total.ceil() as u32
+}
+
+/// 把期望宽度夹进 [320, max_w]；超限时向下取整到整列（永不半列）。
+fn snap_to_columns(em_px: f64, col_w: u32, want: u32, max_w: u32) -> u32 {
+    let max_w = max_w.max(320);
+    if want <= max_w {
+        return want.max(320);
+    }
+    let pad_h = 2.2 * em_px + 2.0;
+    let gap = 1.6 * em_px;
+    let cols = (((max_w as f64 - pad_h + gap) / (col_w as f64 + gap)).floor() as u32).max(1);
+    width_for_columns(em_px, col_w, cols).min(max_w)
+}
+
+/// 主窗口 DPI 缩放（前端按 CSS 像素计宽，窗口 API 用物理像素，须换算，QA B2）。
+fn window_scale(app: &AppHandle) -> f64 {
+    app.get_webview_window("main")
+        .and_then(|w| w.scale_factor().ok())
+        .filter(|s| *s > 0.0)
+        .unwrap_or(1.0)
+}
+
+/// 主显示器工作区（x, y, w, h）；取不到则回退 1920x1080。
+fn work_area(app: &AppHandle) -> (i32, i32, u32, u32) {
+    match app.primary_monitor().ok().flatten() {
         Some(m) => {
             let r = m.work_area();
             (r.position.x, r.position.y, r.size.width, r.size.height)
         }
         None => (0, 0, 1920, 1080),
+    }
+}
+
+/// 把主窗口按给定宽度贴边放置（高 = 工作区全高），并开启点击穿透 + 压底。
+fn place_window(app: &AppHandle, width: u32) {
+    let Some(win) = app.get_webview_window("main") else {
+        return;
     };
-    let w = (ww as f64 * pct) as u32;
-    let h = wh;
-    let x = if side == "left" {
+    let cfg = app.state::<AppState>().config_snapshot();
+    let (wx, wy, ww, wh) = work_area(app);
+    let hi = ww.max(1);
+    let w = width.clamp(320.min(hi), hi);
+    let x = if cfg.side == "left" {
         wx
     } else {
         wx + ww as i32 - w as i32
     };
-    let _ = win.set_size(tauri::PhysicalSize::new(w, h));
+    let _ = win.set_size(tauri::PhysicalSize::new(w, wh));
     let _ = win.set_position(tauri::PhysicalPosition::new(x, wy));
     // 纯点击穿透：挂件不可交互，所有操作走托盘 / 设置页
     if let Err(e) = win.set_ignore_cursor_events(true) {
@@ -133,6 +167,55 @@ fn position_main_window(app: &AppHandle) {
     }
     // Windows：钉在 Z 序最底层（壁纸层），防止浮到应用窗口之上
     pin_to_bottom(&win);
+}
+
+/// 初始定位：手动模式用 manual_columns，自适应先给 3 列，
+/// 首帧渲染后由前端探针实测列数、经 set_panel_width 修正。
+/// 初始宽同样走整列取整，防手动大列数首帧出现半列闪烁（QA m2）。
+fn position_main_window(app: &AppHandle) {
+    let cfg = app.state::<AppState>().config_snapshot();
+    let scale = window_scale(app);
+    let em_px = cfg.font_size as f64 * scale;
+    let col_w = (300.0 * scale).round() as u32;
+    let cols = if cfg.width_mode == "manual" {
+        cfg.manual_columns as u32
+    } else {
+        3
+    };
+    let (_, _, ww, _) = work_area(app);
+    let max_w = (ww as f64 * 0.85) as u32;
+    let w = snap_to_columns(em_px, col_w, width_for_columns(em_px, col_w, cols), max_w);
+    place_window(app, w);
+}
+
+/// 配置变更时重贴边（左右切换）：保持当前窗口宽度，避免自适应宽度
+/// 被重置回 3 列造成闪烁；宽度调整交给前端 fitLayout 经 set_panel_width 完成。
+fn reposition_preserving_width(app: &AppHandle) {
+    let cur = app
+        .get_webview_window("main")
+        .and_then(|w| w.outer_size().ok())
+        .map(|s| s.width);
+    match cur {
+        Some(w) if w >= 320 => place_window(app, w),
+        _ => position_main_window(app),
+    }
+}
+
+/// 前端布局引擎请求窗口宽度（整列宽，入参为 CSS 像素）：内部换算为
+/// 物理像素后夹取到 [320, 工作区 85%]；被夹取时向下取整到整列，
+/// 保证永不出现半列（问题清单 #3/#4）。返回实际应用的宽度（CSS px）。
+#[tauri::command]
+fn set_panel_width(app: AppHandle, width: u32, col_w: u32) -> Result<u32, String> {
+    let cfg = app.state::<AppState>().config_snapshot();
+    let scale = window_scale(&app);
+    let em_px = cfg.font_size as f64 * scale;
+    let col_w_phys = ((col_w.max(1) as f64) * scale).round() as u32;
+    let want_phys = (width as f64 * scale).round() as u32;
+    let (_, _, ww, _) = work_area(&app);
+    let max_w = (ww as f64 * 0.85) as u32;
+    let w = snap_to_columns(em_px, col_w_phys, want_phys, max_w);
+    place_window(&app, w);
+    Ok((w as f64 / scale).round() as u32)
 }
 
 /// Windows：`SetWindowPos(HWND_BOTTOM)` 把窗口压到 Z 序最底。
@@ -249,6 +332,25 @@ async fn get_config(state: State<'_, AppState>) -> Result<Config, String> {
     Ok(state.config_snapshot())
 }
 
+/// 设置页预览（清单 #7）：仅内存生效——换配置/重建数据源/主窗口即时
+/// 重渲染，但不落盘、不触发全量刷新。点「应用」走 set_config 落盘；
+/// 点「取消」/关窗时设置页以打开时快照再次调用本命令回滚。
+#[tauri::command]
+async fn preview_config(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    config: Config,
+) -> Result<(), String> {
+    config.validate()?;
+    state.apply_config(config)?;
+    reposition_preserving_width(&app);
+    let payload = build_widget_state(&state);
+    if let Err(e) = app.emit("calendar-updated", payload) {
+        eprintln!("[preview_config] 发送 calendar-updated 失败: {e}");
+    }
+    Ok(())
+}
+
 /// 写入配置：校验 → 落盘（含重建数据源）→ 重定位窗口 → 后台立即全量刷新一次
 /// （刷新完成后经 `calendar-updated` 事件通知前端重渲染）
 #[tauri::command]
@@ -258,8 +360,22 @@ async fn set_config(
     config: Config,
 ) -> Result<(), String> {
     config.validate()?;
+    let want_autostart = config.autostart;
     state.save_config(config)?;
-    position_main_window(&app);
+    // 开机自启只在「应用」落盘时同步系统状态（预览不碰系统，清单 #7/#9a）
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        let mgr = app.autolaunch();
+        let res = if want_autostart {
+            mgr.enable()
+        } else {
+            mgr.disable()
+        };
+        if let Err(e) = res {
+            eprintln!("[set_config] 开机自启同步失败: {e}");
+        }
+    }
+    reposition_preserving_width(&app);
     // 通知主窗口立即重渲染（配置变更即时生效）
     let payload = build_widget_state(&state);
     if let Err(e) = app.emit("calendar-updated", payload) {
@@ -272,85 +388,121 @@ async fn set_config(
     Ok(())
 }
 
-/// 接口测试（TECH-DESIGN §8）：对金十 / Faireconomy / InvestingBackup 三路分别实测一次本周拉取，
-/// 返回连通性、延迟、解析行数、错误原文（不受配置的 source 模式影响，三路都测）
+/// 接口测试（TECH-DESIGN §8；v0.2 轻量化，清单 #10）：返回连通性、
+/// 延迟、解析行数、错误原文（不受配置的 source 模式影响）。
+/// - 金十：**探活**——完整握手/登录，只拉今日一天（2 个请求），
+///   不再每次测试都全量拉整周，降低平台风控风险；
+/// - Faireconomy：其接口本身即整周一个文件，1 次 GET 已是最小粒度。
 #[tauri::command]
 async fn test_sources() -> Result<Vec<SourceTestResult>, String> {
-    let week_start = schedule::week_monday(now_sh().date_naive());
-    let candidates: Vec<(&str, Result<Box<dyn DataSource>, SourceError>)> = vec![
-        (
-            "jin10",
-            Jin10::new().map(|s| Box::new(s) as Box<dyn DataSource>),
-        ),
-        (
-            "faireconomy",
-            Faireconomy::new().map(|s| Box::new(s) as Box<dyn DataSource>),
-        ),
-        (
-            "backup",
-            InvestingBackup::new().map(|s| Box::new(s) as Box<dyn DataSource>),
-        ),
-    ];
-    let mut out = Vec::with_capacity(3);
-    for (label, res) in candidates {
-        let src = match res {
-            Ok(s) => s,
-            Err(e) => {
-                out.push(SourceTestResult {
-                    name: label.to_string(),
-                    ok: false,
-                    latency_ms: 0,
-                    rows: 0,
-                    error: Some(format!("数据源构造失败: {e}")),
-                });
-                continue;
-            }
-        };
-        let name = src.name().to_string();
+    let mut out = Vec::with_capacity(2);
+
+    // 金十探活（仅今日）
+    {
+        let name = "金十（探活 · 仅今日）".to_string();
         let t0 = std::time::Instant::now();
-        let res = tokio::time::timeout(Duration::from_secs(30), src.fetch_week(week_start)).await;
-        let latency_ms = t0.elapsed().as_millis();
-        match res {
-            Ok(Ok(events)) => out.push(SourceTestResult {
-                name,
-                ok: true,
-                latency_ms,
-                rows: events.len(),
-                error: None,
-            }),
-            Ok(Err(e)) => out.push(SourceTestResult {
+        match Jin10::new() {
+            Ok(src) => {
+                let res = tokio::time::timeout(
+                    Duration::from_secs(30),
+                    src.probe(now_sh().date_naive()),
+                )
+                .await;
+                let latency_ms = t0.elapsed().as_millis();
+                match res {
+                    Ok(Ok(rows)) => out.push(SourceTestResult {
+                        name,
+                        ok: true,
+                        latency_ms,
+                        rows,
+                        error: None,
+                    }),
+                    Ok(Err(e)) => out.push(SourceTestResult {
+                        name,
+                        ok: false,
+                        latency_ms,
+                        rows: 0,
+                        error: Some(e.to_string()),
+                    }),
+                    Err(_) => out.push(SourceTestResult {
+                        name,
+                        ok: false,
+                        latency_ms,
+                        rows: 0,
+                        error: Some("超时（30s 未返回）".to_string()),
+                    }),
+                }
+            }
+            Err(e) => out.push(SourceTestResult {
                 name,
                 ok: false,
-                latency_ms,
+                latency_ms: 0,
                 rows: 0,
-                error: Some(e.to_string()),
-            }),
-            Err(_) => out.push(SourceTestResult {
-                name,
-                ok: false,
-                latency_ms,
-                rows: 0,
-                error: Some("超时（30s 未返回）".to_string()),
+                error: Some(format!("数据源构造失败: {e}")),
             }),
         }
     }
+
+    // Faireconomy：整周 1 次 GET（该接口的最小粒度）
+    {
+        let week_start = schedule::week_monday(now_sh().date_naive());
+        match Faireconomy::new() {
+            Ok(src) => {
+                let name = format!("{}（整周 · 1 次请求）", src.name());
+                let t0 = std::time::Instant::now();
+                let res =
+                    tokio::time::timeout(Duration::from_secs(30), src.fetch_week(week_start))
+                        .await;
+                let latency_ms = t0.elapsed().as_millis();
+                match res {
+                    Ok(Ok(events)) => out.push(SourceTestResult {
+                        name,
+                        ok: true,
+                        latency_ms,
+                        rows: events.len(),
+                        error: None,
+                    }),
+                    Ok(Err(e)) => out.push(SourceTestResult {
+                        name,
+                        ok: false,
+                        latency_ms,
+                        rows: 0,
+                        error: Some(e.to_string()),
+                    }),
+                    Err(_) => out.push(SourceTestResult {
+                        name,
+                        ok: false,
+                        latency_ms,
+                        rows: 0,
+                        error: Some("超时（30s 未返回）".to_string()),
+                    }),
+                }
+            }
+            Err(e) => out.push(SourceTestResult {
+                name: "faireconomy".to_string(),
+                ok: false,
+                latency_ms: 0,
+                rows: 0,
+                error: Some(format!("数据源构造失败: {e}")),
+            }),
+        }
+    }
+
     Ok(out)
 }
 
 /// 实际值覆盖测试（设置页"实际值回填测试"按钮调用，2026-10-23 改版）
-/// 走生产同款降级链（金十 → Faireconomy+FF → Investing）抓本周，
+/// 走生产同款降级链（金十 → Faireconomy+FF）抓本周，
 /// 统计已公布数据行中带实际值的比例，并给出样本。
 /// 返回：{ source, total, published, with_actual, samples[≤5] }
 #[tauri::command]
 async fn test_actuals() -> Result<serde_json::Value, String> {
     let jin10 = Jin10::new().map_err(|e| e.to_string())?;
     let fe = Faireconomy::new().map_err(|e| e.to_string())?;
-    let backup = InvestingBackup::new().map_err(|e| e.to_string())?;
     let week_start = schedule::week_monday(now_sh().date_naive());
     let outcome = caldata::source::fetch_week_with_fallback(
         &jin10,
         &fe,
-        &backup,
         caldata::source::SourceMode::Auto,
         week_start,
         None,
@@ -405,8 +557,6 @@ async fn refresh_now(app: AppHandle) -> Result<RefreshReport, String> {
         used: outcome.used.map(|s| match s {
             Source::Jin10 => "jin10".to_string(),
             Source::Faireconomy => "faireconomy".to_string(),
-            Source::Primary => "primary".to_string(),
-            Source::Backup => "backup".to_string(),
         }),
         from_cache: outcome.from_cache,
         error: if ok {
