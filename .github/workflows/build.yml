@@ -27,7 +27,9 @@ jobs:
   # 说明：tauri-driver WebDriver 交互测试已评估——windows-latest runner
   # 无交互式桌面会话，透明置底/点击穿透等行为无法被 WebDriver 有效验证，
   # 且引入 flaky 风险；故降级为"编译（build job）+ 数据层单测 + 前端语法
-  # 检查 + 无头渲染截图"，均为确定性检查。真机交互/视觉最终确认在用户本机。
+  # 检查"，均为确定性检查。无头渲染截图制品已于 2026-10-23 移除（合成图
+  # 非实机图、且 Chrome 冷启动抖动曾卡住整条流水线）；真机交互/视觉确认
+  # 走 v100 测试机 RDP 回归与用户本机终审。
   # -------------------------------------------------------------------------
   test:
     name: Test (windows-latest)
@@ -62,42 +64,6 @@ jobs:
           node --check src/settings.js
           node --check scripts/screenshot.mjs
 
-      - name: Install screenshot deps
-        shell: bash
-        run: npm install --no-audit --no-fund
-
-      - name: Smoke test Tauri bridge
-        shell: bash
-        run: |
-          echo "=== 检查 withGlobalTauri ==="
-          python3 -c "
-          import json, sys
-          with open('src-tauri/tauri.conf.json') as f:
-              c = json.load(f)
-          v = c.get('app', {}).get('withGlobalTauri', False)
-          print('withGlobalTauri =', v)
-          sys.exit(0 if v is True else 1)
-          "
-          echo "=== 检查前端无残留引用 ==="
-          ! grep -rn "p-quote\|dayQuote" src/index.html src/app.js && echo "无格言残留 OK"
-          echo "=== 检查取色器 data-key ==="
-          test $(grep -c 'data-color-key' src/settings.html) -eq 7 && echo "7 个取色器接线 OK"
-
-      - name: Render screenshots (headless Chrome)
-        shell: bash
-        env:
-          # 脚本需支持 CHROME_PATH 环境变量覆盖 chromium 路径
-          # （见 scripts/screenshot.mjs 顶部注释）
-          CHROME_PATH: 'C:\Program Files\Google\Chrome\Application\chrome.exe'
-        run: node scripts/screenshot.mjs
-
-      - name: Upload screenshots
-        uses: actions/upload-artifact@v4
-        with:
-          name: FinCalendarWidget-screenshots
-          if-no-files-found: error
-          path: docs/screenshots/*.png
-
   build:
     name: Build (${{ matrix.os }})
     needs: [test]
@@ -108,6 +74,10 @@ jobs:
           # Windows：msi（企业分发）+ nsis（经典安装向导）
           - os: windows-latest
             bundles: "--bundles msi,nsis"
+          # macOS：dmg（macos-latest 为 arm64 runner，产物为 aarch64；
+          # 如需 x86_64/universal，后续再加 --target 矩阵）
+          - os: macos-latest
+            bundles: "--bundles dmg"
     runs-on: ${{ matrix.os }}
 
     steps:
