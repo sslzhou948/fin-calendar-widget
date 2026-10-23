@@ -238,12 +238,14 @@
         return;
       }
       var r = await T.core.invoke('test_actuals');
+      var okRate = r.published > 0 && r.with_actual > 0;
       var html = '<div class="t-card">' +
-        '<div><strong>实际值回填测试</strong>　' +
-        (r.filled > 0 ? '<span class="ok">✓ 正常</span>' : '<span class="fail">✗ 未回填</span>') + '</div>' +
-        '<div>Faireconomy 事件：' + r.fe_events + ' 条　' +
-        'ForexFactory 抓取：' + r.ff_rows + ' 行　' +
-        '回填成功：' + r.filled + ' 条</div>';
+        '<div><strong>实际值覆盖测试</strong>　' +
+        (okRate ? '<span class="ok">✓ 正常</span>' : '<span class="fail">✗ 无实际值</span>') + '</div>' +
+        '<div>命中数据源：' + escapeHtml(String(r.source)) + '　' +
+        '本周事件：' + r.total + ' 条　' +
+        '已公布数据行：' + r.published + ' 条　' +
+        '带实际值：' + r.with_actual + ' 条</div>';
       if (r.samples && r.samples.length) {
         html += '<div style="margin-top:8px;font-size:12px;color:var(--muted)">样本：</div>';
         r.samples.forEach(function (s) {
@@ -254,7 +256,7 @@
             '　<span class="ok">实际 ' + escapeHtml(String(s.actual || '—')) + '</span></div>';
         });
       } else {
-        html += '<div class="note">暂无已公布事件（本周事件均未到发布时间，或抓取失败）。</div>';
+        html += '<div class="note">暂无已公布数据行（本周数据均未到发布时间）。</div>';
       }
       html += '</div>';
       box.innerHTML = html;
