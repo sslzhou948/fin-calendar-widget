@@ -5,11 +5,13 @@
 //! ② 启动时 `reconcile()`：covered_week 过期 → 全量补拉；已过发布时间但 actual 为空 → 补拉；
 //! ③ 事件驱动唤醒：`schedule::build_wake_list()` → 每事件 release_at+2min 到点刷新 actual。
 //! 唤醒时间表在"全量刷新 / 配置变更 / 对账"后重建（经 `AppState::request_rebuild` 信号）。
-//! ④ 兜底扫尾：每 15 分钟检查已过发布时间但 actual 仍为空的数据行，重试拉取。
-//! 覆盖两种缺口：③ 那次拉取失败（两路源都挂），或数据源公布延迟（+2min 时还没出数）。
+//! ④ 兜底扫尾：每 5 分钟检查已过发布时间但 actual 仍为空的数据行，按数据源
+//! 分流重试（金十缓存重拉对应周 / Faireconomy 缓存抓 FF 页面回填）。
+//! 覆盖两种缺口：③ 那次拉取失败（全链源都挂），或数据源公布延迟（+2min 时还没出数）。
 //!
-//! 拉取统一走 `caldata::source::fetch_week_with_fallback`（Primary → Backup → 本地缓存），
-//! `FetchOutcome.from_cache` 为 true 时表示两路都失败、兜底用了缓存。
+//! 拉取统一走 `caldata::source::fetch_week_with_fallback`（金十 → Faireconomy →
+//! InvestingBackup → 本地缓存），
+//! `FetchOutcome.from_cache` 为 true 时表示全链失败、兜底用了缓存。
 
 use std::time::Duration;
 
@@ -66,7 +68,7 @@ pub fn spawn(app: AppHandle, wake_rx: tokio::sync::mpsc::Receiver<()>) {
     tauri::async_runtime::spawn(wake_loop(app3, wake_rx));
 
     // ④ 事件驱动 actual 回填：每 5 分钟轻量检查（本地，无网络），
-    // 有待回填事件时才抓一次 FF 页面（2026-10-19 重构，防接口屏蔽）
+    // 有待回填事件时才发请求（金十重拉本周 / Faireconomy 抓 FF 页面）
     let app4 = app.clone();
     tauri::async_runtime::spawn(async move {
         loop {
@@ -117,6 +119,7 @@ async fn reconcile(app: &AppHandle) {
     for ws in stale_weeks {
         let outcome = fetch_week_with_fallback(
             &sources.primary,
+            &sources.secondary,
             &sources.backup,
             cfg.to_source_mode(),
             ws,
@@ -148,6 +151,7 @@ pub async fn full_refresh(app: &AppHandle) -> caldata::source::FetchOutcome {
 
     let outcome = fetch_week_with_fallback(
         &sources.primary,
+        &sources.secondary,
         &sources.backup,
         cfg.to_source_mode(),
         week_start,
@@ -158,7 +162,7 @@ pub async fn full_refresh(app: &AppHandle) -> caldata::source::FetchOutcome {
     if outcome.from_cache {
         let err = format_errors(&outcome);
         let msg = if err.is_empty() {
-            "两路数据源均失败".to_string()
+            "数据源全链均失败".to_string()
         } else {
             err
         };
@@ -250,6 +254,7 @@ async fn fire_due(app: &AppHandle, wakes: &mut Vec<(DateTime<Tz>, String)>) {
     for ws in weeks {
         let outcome = fetch_week_with_fallback(
             &sources.primary,
+            &sources.secondary,
             &sources.backup,
             cfg.to_source_mode(),
             ws,
@@ -267,16 +272,20 @@ async fn fire_due(app: &AppHandle, wakes: &mut Vec<(DateTime<Tz>, String)>) {
     emit_updated(app);
 }
 
-/// 事件驱动 actual 回填（2026-10-19 重构）：替代无脑 15 分钟全量扫。
+/// 事件驱动 actual 回填（2026-10-19 重构；2026-10-23 按数据源分流）：
+/// 替代无脑 15 分钟全量扫。
 ///
-/// 触发条件（同时满足才抓一次 FF 页面，批量回填）：
+/// 触发条件（同时满足才动作）：
 /// - 数据行（有 forecast/previous 任一）且 actual 为空
-/// - now >= event_time + 10min（给发布方和 FF 留出更新时间，避开大事件流量高峰）
+/// - now >= event_time + 10min（给发布方留出更新时间，避开大事件流量高峰）
 /// - now <= event_time + 4h（太久远的不追，每周日全量刷新兜底）
-/// - 上次尝试在 30 分钟前（FF 故障时退避，不 hammer）
+/// - 上次尝试在 30 分钟前（源故障时退避，不 hammer）
 ///
-/// 检查间隔 5 分钟（本地轻量，无网络）；有符合条件事件时才产生 1 次 FF 请求。
-/// 相比旧逻辑（每 15 分钟全周重抓，~672 次/周），新逻辑约 20-40 次/周。
+/// 分流：
+/// - 缓存来自金十 → 重拉本周（actual 原生返回，data_id 幂等匹配回填）
+/// - 缓存来自 Faireconomy → 抓一次 FF 页面批量回填（原路径）
+///
+/// 检查间隔 5 分钟（本地轻量，无网络）；有符合条件事件时才发请求。
 async fn sweep_stale_actuals(app: &AppHandle) {
     use chrono::Duration;
 
@@ -290,33 +299,74 @@ async fn sweep_stale_actuals(app: &AppHandle) {
         }
     }
 
-    // 找待回填事件（只计数，不建 Vec）
-    let pending_count: usize = {
+    // 找待回填事件（计数 + 所在周集合：周一凌晨时上周日的晚间事件仍在 4h 窗口内）
+    let (pending_count, pending_weeks): (usize, Vec<NaiveDate>) = {
         let cache = state.cache_snapshot();
-        cache
-            .events
-            .iter()
-            .filter(|e| {
-                // 数据行：任一数值非空
-                let is_data = e.forecast.is_some() || e.previous.is_some();
-                if !is_data || e.actual.is_some() {
-                    return false;
+        let mut weeks: Vec<NaiveDate> = Vec::new();
+        let mut count = 0usize;
+        for e in cache.events.iter() {
+            // 数据行：任一数值非空
+            let is_data = e.forecast.is_some() || e.previous.is_some();
+            if !is_data || e.actual.is_some() {
+                continue;
+            }
+            let elapsed = now.signed_duration_since(e.release_at);
+            // 已过发布时间 10 分钟，且在 4 小时内
+            if elapsed >= Duration::minutes(10) && elapsed <= Duration::hours(4) {
+                count += 1;
+                let ws = schedule::week_monday(e.release_at.date_naive());
+                if !weeks.contains(&ws) {
+                    weeks.push(ws);
                 }
-                let elapsed = now.signed_duration_since(e.release_at);
-                // 已过发布时间 10 分钟，且在 4 小时内
-                elapsed >= Duration::minutes(10) && elapsed <= Duration::hours(4)
-            })
-            .count()
+            }
+        }
+        (count, weeks)
     };
 
     if pending_count == 0 {
         return;
     }
 
+    // 分流：金十缓存重拉本周（actual 原生）；其余走 FF 回填
+    let from_jin10 = {
+        let cache = state.cache_snapshot();
+        cache.events.iter().any(|e| e.source == Source::Jin10)
+    };
+    state.set_last_actuals_sweep(now);
+    if from_jin10 {
+        eprintln!(
+            "[scheduler] 事件驱动回填（金十）：{pending_count} 个事件待更新，重拉 {} 个周",
+            pending_weeks.len()
+        );
+        let cfg = state.config_snapshot();
+        let sources = state.sources();
+        for ws in pending_weeks {
+            let outcome = fetch_week_with_fallback(
+                &sources.primary,
+                &sources.secondary,
+                &sources.backup,
+                cfg.to_source_mode(),
+                ws,
+                None,
+            )
+            .await;
+            if outcome.from_cache {
+                eprintln!("[scheduler] 金十重拉失败（全链兜底缓存），30 分钟后重试");
+                continue;
+            }
+            let newly = state.apply_actuals(&outcome.events);
+            if !newly.is_empty() {
+                eprintln!("[scheduler] 回填 {} 条实际值", newly.len());
+                crate::notifier::notify_new_actuals(app, &newly).await;
+            }
+        }
+        emit_updated(app);
+        return;
+    }
+
     eprintln!(
         "[scheduler] 事件驱动回填：{pending_count} 个事件待更新，抓取 FF 页面"
     );
-    state.set_last_actuals_sweep(now);
 
     // 抓一次 FF 页面，批量回填（用 caldata 共享 Client）
     let client = caldata::source::shared_client();
@@ -387,6 +437,7 @@ pub(crate) fn format_errors(outcome: &caldata::source::FetchOutcome) -> String {
 
 pub(crate) fn describe_used(used: Option<Source>) -> &'static str {
     match used {
+        Some(Source::Jin10) => "jin10",
         Some(Source::Faireconomy) => "faireconomy",
         Some(Source::Primary) => "primary",
         Some(Source::Backup) => "backup",
