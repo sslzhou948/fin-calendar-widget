@@ -163,14 +163,14 @@ body.no-frosted #panel {
   word-break: break-word;
 }
 
-/* kind=event 例外（清单 #16，用户 2026-10-23 拍板）：超长文本限 5 行
+/* kind=event 例外（清单 #16，用户 2026-10-23 拍板）：超长文本限 8 行
    省略。一周样本里事件行最长是交易所运营公告（113 字），整段上板占
    大半列；面板点击穿透、无展开手段，尾巴只能舍。仅事件行，数据行
    标题仍按上面的「不断截」口径。布局探针测的是同一套类的克隆节点，
    测得的高度自动是截断后的高度。 */
 .ev-event .title {
   display: -webkit-box;
-  -webkit-line-clamp: 5;
+  -webkit-line-clamp: 8;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
