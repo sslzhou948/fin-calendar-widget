@@ -33,11 +33,14 @@
     font_size: 14,
     frosted: true,
     notifications: true,
+    autostart: true,        // 开机自启动（#9a）
     source: 'auto',
     usd_mode: false,       // 美元口径：按 usd_sentiment(bull=红/bear=绿) 给实际值着色
     notify_events: false,   // 事件类（讲话/纪要）也发系统通知
     hide_holidays: false,   // 隐藏假期行
-    panel_width_pct: 42,    // 面板宽度占屏幕宽度的百分比 25–75（Rust 端调窗口）
+    panel_width_pct: 42,    // v0.2 退役（仅兼容），宽度由 width_mode 决定
+    width_mode: 'auto',     // 宽度模式：auto=按内容列数自适应 | manual=固定列数
+    manual_columns: 3,      // 手动模式列数 1–6
     frost_opacity: 70,      // 毛玻璃背景不透明度 0–100
     colors: {               // 颜色主题（与 styles.css :root / Rust 默认值保持一致）
       time: '#f0a832', stars: '#ffd166',
@@ -46,7 +49,6 @@
     }
   };
 
-  var MIN_FS = 9;   /* 方案A floor：再小中文即不可读 */
   var NEAR_MS = 6 * 3600 * 1000;   // 距公布 <6 小时高亮
   var WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -135,6 +137,9 @@
     var fo = clampInt(config.frost_opacity, 0, 100, 70);
     config.frost_opacity = fo;
     root.style.setProperty('--frost-opacity', (fo / 100).toFixed(2));
+    /* 布局变量归位：渲染前的 --fs/--colw 以配置为准，
+       fitLayout 会在 render() 内按实测结果覆盖（触顶降档等） */
+    root.style.setProperty('--colw', '300px');
   }
 
   function mergeConfig(c) {
@@ -152,9 +157,14 @@
 
   /* ---------- 数据加载 ---------- */
 
+  var metaUpdatedAt = null;   /* 后端 WidgetState.updated_at（最后一次数据落库时间） */
+  var metaLastError = null;   /* 后端 WidgetState.last_error（非空 = 当前显示的是兜底旧数据） */
+
   function applyState(state) {
     if (!state) return;
     events = Array.isArray(state.events) ? state.events : (Array.isArray(state) ? state : []);
+    if (state.updated_at !== undefined) metaUpdatedAt = state.updated_at;
+    if (state.last_error !== undefined) metaLastError = state.last_error;
     mergeConfig(state.config);
     render();
   }
@@ -395,37 +405,170 @@
 
     document.getElementById('groups').innerHTML = html;
     document.getElementById('empty').hidden = list.length > 0;
-    fitFont();
-    /* 触底仍溢出：页脚如实提示（极端忙周） */
+    fitLayout();
+    refreshOverflowNote();
+  }
+
+  /* 页脚：刷新口径 + 数据新鲜度（清单 #12）。
+   * 后端每次数据落库都更新 updated_at；全链失败用缓存兜底时记
+   * last_error。两者如实展示——防"旧缓存冒充新数据"误导用户。 */
+  function freshnessSuffix() {
+    if (!metaUpdatedAt) return '';
+    var hm = metaUpdatedAt.slice(11, 16);                    /* HH:mm */
+    var md = metaUpdatedAt.slice(5, 10);                      /* MM-DD */
+    var now = new Date();
+    var todayMd = ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2);
+    var label = (md === todayMd) ? hm : (md.replace('-', '/') + ' ' + hm);
+    return metaLastError
+      ? ' · ⚠ 更新失败，数据截至 ' + label
+      : ' · 数据截至 ' + label;
+  }
+
+  /* 页脚溢出提示（触顶/被夹取时如实标注，fitLayout 的异步回执也会调用） */
+  function refreshOverflowNote() {
     var note = document.querySelector('.p-foot .p-note');
     if (note) {
-      note.textContent = '事件驱动刷新 · 每周日 00:00(北京时间)全量更新 · 开机自动对账' +
-        (document.getElementById('groups').dataset.overflow ? '（本周事件较多，已压缩至最小字号）' : '');
+      note.textContent = '事件驱动刷新 · 每周一 10:00(北京时间)全量更新 · 开机自动刷新' +
+        freshnessSuffix() +
+        (document.getElementById('groups').dataset.overflow ? '（本周事件较多，超出部分未显示）' : '');
+      note.classList.toggle('stale', !!metaLastError);
     }
   }
 
-  /* 字号自适应（方案A）：#groups 内容溢出则逐级缩小 --fs（步长 1px，最小 10px）直到放下。
-   * 注意：必须量 #groups（flex:1 的裁剪容器）而非 #panel——panel 自身被 max-height
-   * 封顶，scrollHeight 恒等于 clientHeight，量它永远测不出溢出。 */
-  function fitFont() {
+  /* ---------- 布局引擎（v0.2，问题清单 #1–#4） ----------
+   * 宽度由「整列」反推：渲染后用离屏探针实测内容所需列数，经
+   * set_panel_width 把窗口宽设为整数列宽，从构造上杜绝半列裁切（#4）。
+   * 装不下时阶梯降级：列宽 300→280→260→240 → 字号逐档降（下限 11px）；
+   * 触顶仍装不下 → Rust 按整列夹取，超出部分整条省略（页脚提示）。
+   * 字号自此独立生效（#2）：config.font_size 是基准，布局只会因触顶临时降档，
+   * 不再有旧 fitFont「量垂直溢出」的无效收缩。 */
+
+  var COLW_STEPS = [300, 280, 260, 240];
+  var LAYOUT_MIN_FS = 11;
+  var probeEl = null;
+  var lastWantWidth = 0;
+
+  /* 在给定列宽/字号下，实测当前内容需要几列。
+   * ⚠️ 不能用 probe.scrollWidth：探针自身宽 30000px，scrollWidth 恒 ≥
+   * 其 clientWidth，任何内容都会被误判成 90+ 列（本地无头实测踩坑：
+   * 18 条数据被降到最窄列宽+最小字号并误报溢出）。改用子元素矩形
+   * 并集的右缘推算内容总宽（分片元素的 rect 是各分片的并集，右缘
+   * 即内容最右端）。 */
+  function probeCols(colW, fs) {
     var groups = document.getElementById('groups');
-    var fs = clampInt(config.font_size, 12, 18, 14);
-    var root = document.documentElement;
-    root.style.setProperty('--fs', fs + 'px');
-    var guard = 0;
-    while (groups.scrollHeight > groups.clientHeight && fs > MIN_FS && guard < 24) {
-      fs -= 1;
-      root.style.setProperty('--fs', fs + 'px');
-      guard++;
+    if (!probeEl) {
+      probeEl = document.createElement('div');
+      probeEl.className = 'probe';
+      document.body.appendChild(probeEl);
     }
-    /* 触底仍溢出：如实记录（调用方可据此提示"还有 N 条未显示"） */
-    groups.dataset.overflow = groups.scrollHeight > groups.clientHeight ? '1' : '';
+    probeEl.style.height = groups.clientHeight + 'px';
+    probeEl.style.columnWidth = colW + 'px';
+    probeEl.style.fontSize = fs + 'px';
+    probeEl.innerHTML = groups.innerHTML;
+    var left = probeEl.getBoundingClientRect().left;
+    /* ⚠️ 初值必须是 left（探针在 -99999px 离屏处，子元素 rect 全为
+       大负数）：初值若给 0 则永不更新、total 恒为 99999（实测踩坑） */
+    var maxRight = left;
+    for (var i = 0; i < probeEl.children.length; i++) {
+      var r = probeEl.children[i].getBoundingClientRect();
+      if (r.right > maxRight) maxRight = r.right;
+    }
+    var total = maxRight - left;
+    return Math.max(1, Math.ceil(total / (colW + 1.6 * fs)));
+  }
+
+  /* 整列宽（CSS px）：面板横向内边距 2×1.1em + 边框 2px + 列宽 + 列间隔
+   * 1.6em。全程浮点、总量向上取整——逐分量取整会在默认字号下产生负误差、
+   * 静默吞掉最后一列（QA B1）；与 Rust width_for_columns 同一公式。 */
+  function widthFor(cols, colW, fs) {
+    return Math.ceil(2.2 * fs + 2 + cols * colW + (cols - 1) * 1.6 * fs);
+  }
+
+  function fitLayout() {
+    var groups = document.getElementById('groups');
+    if (!groups) return;
+    var root = document.documentElement;
+    var cfgFs = clampInt(config.font_size, 12, 18, 14);
+    var maxW = Math.floor(window.screen.width * 0.85);
+    var colW = 300, fsUsed = cfgFs, cols = 3, fits = true;
+
+    if (config.width_mode === 'manual') {
+      cols = clampInt(config.manual_columns, 1, 6, 3);
+      if (!groups.innerHTML) {
+        fits = widthFor(cols, colW, cfgFs) <= maxW;
+      } else {
+        /* 列数恒定；装不下走降档阶梯（列宽→字号），仍装不下则
+           fits=false → 整列省略 + 页脚提示，绝不静默丢列。
+           ⚠️ 旧实现只查"列数放不放得进屏宽"、不查内容容量：手选
+           2 列塞 60 条时溢出列不可见且无标记（无头实测 D 场景）。 */
+        fits = false;
+        for (var mi = 0; mi < COLW_STEPS.length && !fits; mi++) {
+          if (probeCols(COLW_STEPS[mi], cfgFs) <= cols &&
+              widthFor(cols, COLW_STEPS[mi], cfgFs) <= maxW) {
+            colW = COLW_STEPS[mi]; fits = true;
+          }
+        }
+        for (var mf = cfgFs - 1; mf >= LAYOUT_MIN_FS && !fits; mf--) {
+          root.style.setProperty('--fs', mf + 'px');
+          if (probeCols(240, mf) <= cols && widthFor(cols, 240, mf) <= maxW) {
+            colW = 240; fsUsed = mf; fits = true;
+          }
+        }
+        if (!fits) { colW = 240; fsUsed = LAYOUT_MIN_FS; }
+      }
+    } else if (groups.innerHTML) {
+      fits = false;
+      /* 阶梯一：当前字号下逐档降列宽 */
+      for (var ci = 0; ci < COLW_STEPS.length && !fits; ci++) {
+        var c1 = probeCols(COLW_STEPS[ci], cfgFs);
+        if (widthFor(c1, COLW_STEPS[ci], cfgFs) <= maxW) {
+          cols = c1; colW = COLW_STEPS[ci]; fits = true;
+        }
+      }
+      /* 阶梯二：最窄列宽下逐档降字号（--fs 先行，让面板边框高度与探针一致） */
+      for (var f = cfgFs - 1; f >= LAYOUT_MIN_FS && !fits; f--) {
+        root.style.setProperty('--fs', f + 'px');
+        var c2 = probeCols(240, f);
+        if (widthFor(c2, 240, f) <= maxW) {
+          cols = c2; colW = 240; fsUsed = f; fits = true;
+        }
+      }
+      if (!fits) { /* 触顶：最窄列宽 + 最小字号，宽度由 Rust 整列夹取 */
+        colW = 240; fsUsed = LAYOUT_MIN_FS;
+        cols = probeCols(colW, fsUsed);
+      }
+    }
+
+    root.style.setProperty('--fs', fsUsed + 'px');
+    root.style.setProperty('--colw', colW + 'px');
+    groups.dataset.overflow = fits ? '' : '1';
+
+    if (isTauri()) {
+      var want = widthFor(cols, colW, fsUsed);
+      if (Math.abs(want - window.innerWidth) > 4 && want !== lastWantWidth) {
+        lastWantWidth = want;
+        T.core.invoke('set_panel_width', { width: want, colW: colW })
+          .then(function (applied) {
+            /* Rust 因工作区口径（任务栏等）再夹取时，前端估计的 fits
+               可能过于乐观——以实际应用宽度为准补记溢出（QA B2） */
+            if (applied && applied < want - 4) {
+              groups.dataset.overflow = '1';
+              refreshOverflowNote();
+            }
+          })
+          .catch(function () { lastWantWidth = 0; /* 失败不冻结，下次渲染重试（QA M3） */ });
+      }
+    }
   }
 
   /* ---------- 启动 ---------- */
 
   function init() {
-    window.addEventListener('resize', function () { fitFont(); });
+    var resizeTimer = null;
+    window.addEventListener('resize', function () {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(fitLayout, 120);
+    });
     if (isTauri()) {
       loadFromTauri();
     } else {
