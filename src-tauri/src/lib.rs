@@ -15,6 +15,8 @@ mod notifier;
 mod scheduler;
 mod state;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use caldata::faireconomy::Faireconomy;
@@ -26,12 +28,20 @@ use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use serde::Serialize;
 use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder},
+    menu::{CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder},
     tray::TrayIconBuilder,
     AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder,
 };
 
 use state::{AppState, Config};
+
+/// 交互模式运行时状态（2026-10-23 混合式）：不落盘，重启必回穿透。
+/// `on` 是唯一事实源——place_window 重贴边时据此决定是否穿透，
+/// 防数据刷新触发的改宽把穿透偷偷开回、与前端泳道状态脱节。
+struct InteractiveState {
+    on: AtomicBool,
+    item: Mutex<Option<CheckMenuItem>>,
+}
 
 /// 上海时区当前时间（内部统一时区，TECH-DESIGN §6）
 pub(crate) fn now_sh() -> DateTime<Tz> {
@@ -82,6 +92,10 @@ pub fn run() {
 
             let (state, wake_rx) = AppState::load(dir)?;
             app.manage(state);
+            app.manage(InteractiveState {
+                on: AtomicBool::new(false),
+                item: Mutex::new(None),
+            });
 
             position_main_window(app.handle());
 
@@ -117,6 +131,8 @@ pub fn run() {
             set_config,
             preview_config,
             set_panel_width,
+            set_interactive,
+            get_interactive,
             test_sources,
             test_actuals,
             refresh_now
@@ -185,9 +201,15 @@ fn place_window(app: &AppHandle, width: u32) {
     };
     let _ = win.set_size(tauri::PhysicalSize::new(w, wh));
     let _ = win.set_position(tauri::PhysicalPosition::new(x, wy));
-    // 纯点击穿透：挂件不可交互，所有操作走托盘 / 设置页
-    if let Err(e) = win.set_ignore_cursor_events(true) {
-        eprintln!("[window] 点击穿透开启失败: {e}");
+    // 点击穿透：默认全穿透（挂件不可交互，操作走托盘 / 设置页）；
+    // 交互模式中则保持可交互——重贴边（刷新改宽 / 配置变更）不得
+    // 把穿透偷偷开回，否则前端泳道还在、鼠标已死（状态脱节）。
+    let interactive = app
+        .try_state::<InteractiveState>()
+        .map(|s| s.on.load(Ordering::SeqCst))
+        .unwrap_or(false);
+    if let Err(e) = win.set_ignore_cursor_events(!interactive) {
+        eprintln!("[window] 点击穿透设置失败: {e}");
     }
     // Windows：钉在 Z 序最底层（壁纸层），防止浮到应用窗口之上
     pin_to_bottom(&win);
@@ -223,6 +245,59 @@ fn reposition_preserving_width(app: &AppHandle) {
         Some(w) if w >= 320 => place_window(app, w),
         _ => position_main_window(app),
     }
+}
+
+/// 交互模式切换的唯一入口（托盘勾选 / set_interactive 命令共用）：
+/// 状态位 → 托盘勾选 → 窗口穿透 → 焦点 → 广播给前端切泳道。
+/// 进入时给焦点，Esc 才有处可落；退出不抢焦点（用户多半已切走）。
+/// 串行性（QA m2）：同步命令与菜单事件同在主线程事件循环串行执行，
+/// 本函数不可重入；若日后把 set_interactive 改成 async 命令，须先
+/// 给这里加整体串行化，否则读-改-写会交错出混合终态。
+fn apply_interactive(app: &AppHandle, on: bool) {
+    if let Some(st) = app.try_state::<InteractiveState>() {
+        st.on.store(on, Ordering::SeqCst);
+        // 先在锁内 clone 句柄、放锁再调平台 API（QA m1）：set_checked
+        // 在个别平台会同步派发主线程，持锁调用有互等风险；锁中毒要
+        // 留日志，不能静默跳过（否则勾选永久不同步且无迹可查）。
+        let item = match st.item.lock() {
+            Ok(g) => g.clone(),
+            Err(_) => {
+                eprintln!("[app] 交互菜单锁中毒，本次勾选同步跳过");
+                None
+            }
+        };
+        if let Some(item) = item {
+            let _ = item.set_checked(on);
+        }
+    }
+    if let Some(win) = app.get_webview_window("main") {
+        if let Err(e) = win.set_ignore_cursor_events(!on) {
+            eprintln!("[window] 交互模式穿透切换失败: {e}");
+        }
+        if on {
+            let _ = win.show();
+            let _ = win.set_focus();
+        }
+    }
+    if let Err(e) = app.emit_to("main", "interactive-changed", on) {
+        eprintln!("[app] interactive-changed 广播失败: {e}");
+    }
+}
+
+/// 前端请求切换交互模式（Esc / 面板退出按钮调用）
+#[tauri::command]
+fn set_interactive(app: AppHandle, on: bool) {
+    apply_interactive(&app, on);
+}
+
+/// 前端查询交互状态：interactive-changed 是即发即忘事件，监听注册前
+/// 发生的切换（冷启动时托盘抢先点、WebView 崩溃重载）会永久丢失，
+/// 前端启动后靠本命令向事实源对账收敛（QA M1）。
+#[tauri::command]
+fn get_interactive(app: AppHandle) -> bool {
+    app.try_state::<InteractiveState>()
+        .map(|s| s.on.load(Ordering::SeqCst))
+        .unwrap_or(false)
 }
 
 /// 前端布局引擎请求窗口宽度（整列宽，入参为 CSS 像素）：内部换算为
@@ -281,11 +356,21 @@ fn pin_to_bottom(win: &tauri::WebviewWindow) {
 #[cfg(not(target_os = "windows"))]
 fn pin_to_bottom(_win: &tauri::WebviewWindow) {}
 
-/// 托盘：打开设置 / 立即刷新 / 退出
+/// 托盘：打开设置 / 交互浏览 / 立即刷新 / 退出
 fn build_tray(app: &AppHandle) {
     let open_item = MenuItemBuilder::with_id("tray_open_settings", "打开设置")
         .build(app)
         .expect("托盘菜单创建失败");
+    let interactive_item = CheckMenuItemBuilder::with_id("tray_interactive", "交互浏览（滚轮）")
+        .checked(false)
+        .build(app)
+        .expect("托盘菜单创建失败");
+    // 勾选状态由 apply_interactive 统一维护（Esc/退出按钮退出时也要同步）
+    if let Some(st) = app.try_state::<InteractiveState>() {
+        if let Ok(mut g) = st.item.lock() {
+            *g = Some(interactive_item.clone());
+        }
+    }
     let refresh_item = MenuItemBuilder::with_id("tray_refresh", "立即刷新")
         .build(app)
         .expect("托盘菜单创建失败");
@@ -293,7 +378,7 @@ fn build_tray(app: &AppHandle) {
         .build(app)
         .expect("托盘菜单创建失败");
     let menu = MenuBuilder::new(app)
-        .items(&[&open_item, &refresh_item, &quit_item])
+        .items(&[&open_item, &interactive_item, &refresh_item, &quit_item])
         .build()
         .expect("托盘菜单创建失败");
 
@@ -309,6 +394,13 @@ fn build_tray(app: &AppHandle) {
         .tooltip("财经日历挂件")
         .on_menu_event(|app, event| match event.id.as_ref() {
             "tray_open_settings" => open_settings(app),
+            "tray_interactive" => {
+                let cur = app
+                    .try_state::<InteractiveState>()
+                    .map(|s| s.on.load(Ordering::SeqCst))
+                    .unwrap_or(false);
+                apply_interactive(app, !cur);
+            }
             "tray_refresh" => {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {

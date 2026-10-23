@@ -108,6 +108,13 @@
   var config = Object.assign({}, DEFAULT_CONFIG);
   var events = [];
 
+  /* 交互模式（按天泳道 + 滚轮，2026-10-23 用户拍板混合式）：运行时
+   * 状态、不落盘，重启必回穿透。lastDays 缓存最近一次 render 的按天
+   * 行 HTML——分列与泳道共用同一份行渲染结果，保证两边内容逐字一致。 */
+  var interactive = false;
+  var laneScroll = {};        // dayKey -> scrollTop（重绘/退出时按天恢复）
+  var lastDays = [];          // [{key, label, count, rowsHtml}]
+
   var T = (typeof window !== 'undefined') ? window.__TAURI__ : undefined;
 
   function isTauri() {
@@ -190,6 +197,20 @@
         });
       }
     } catch (e) { /* 监听失败不影响首屏 */ }
+    try {
+      if (T.event && typeof T.event.listen === 'function') {
+        await T.event.listen('interactive-changed', function (event) {
+          setInteractive(!!(event && event.payload));
+        });
+      }
+    } catch (e) { /* 监听失败不影响托盘以外的功能 */ }
+    /* 状态校准（QA M1）：上面的事件即发即忘，监听注册前发生的切换
+       （冷启动竞速、WebView 重载）会永久丢失且无从察觉；注册完成后
+       主动向 Rust（唯一事实源）对一次账，三方状态必然收敛。 */
+    try {
+      var cur = await T.core.invoke('get_interactive');
+      if (!!cur !== interactive) setInteractive(!!cur);
+    } catch (e) { /* 旧二进制无此命令：维持本地状态 */ }
   }
 
   async function loadFromSample() {
@@ -387,8 +408,8 @@
     });
 
     var now = Date.now();
-    var html = groups.map(function (k, gi) {
-      var rows = map[k].map(function (e) {
+    lastDays = groups.map(function (k) {
+      var rowsHtml = map[k].map(function (e) {
         var t = evTimeMs(e);
         var kind = e.kind || 'data';
         // 临近高亮：data/event 行保留，holiday 行不加
@@ -397,16 +418,71 @@
         if (kind === 'event') return renderEventRow(e, near);
         return renderDataRow(e, near);
       }).join('');
+      return { key: k, label: dayLabel(k), count: map[k].length, rowsHtml: rowsHtml };
+    });
+    var html = lastDays.map(function (d) {
       return '<section class="day-group">' +
-               '<div class="day-head">' + escapeHtml(dayLabel(k)) + '</div>' +
-               rows +
+               '<div class="day-head">' + escapeHtml(d.label) + '</div>' +
+               d.rowsHtml +
              '</section>';
     }).join('');
 
     document.getElementById('groups').innerHTML = html;
     document.getElementById('empty').hidden = list.length > 0;
-    fitLayout();
+    /* 交互中数据更新：只重绘泳道（fitLayout 的探针量的是隐藏的分列
+       容器，此时跑它会量错并误发改宽请求）；穿透时照旧走布局引擎。 */
+    if (interactive) { buildLanes(); } else { fitLayout(); }
     refreshOverflowNote();
+  }
+
+  /* ---------- 交互模式（按天泳道 + 滚轮） ---------- */
+
+  function saveLaneScrolls() {
+    var bodies = document.querySelectorAll('.lane-body');
+    for (var i = 0; i < bodies.length; i++) {
+      laneScroll[bodies[i].getAttribute('data-day')] = bodies[i].scrollTop;
+    }
+  }
+
+  function buildLanes() {
+    saveLaneScrolls();           // 重绘前先存旧滚动位置（首次为空操作）
+    var lanesEl = document.getElementById('lanes');
+    lanesEl.innerHTML = lastDays.map(function (d) {
+      return '<section class="lane">' +
+        '<div class="lane-head">' + escapeHtml(d.label) +
+          '<span class="lane-count">' + d.count + ' 条</span></div>' +
+        '<div class="lane-body" data-day="' + escapeHtml(d.key) + '">' + d.rowsHtml + '</div>' +
+      '</section>';
+    }).join('');
+    var bodies = lanesEl.querySelectorAll('.lane-body');
+    for (var i = 0; i < bodies.length; i++) {
+      var k = bodies[i].getAttribute('data-day');
+      if (laneScroll[k]) bodies[i].scrollTop = laneScroll[k];
+    }
+  }
+
+  /* UI 侧应用模式状态（Rust 的 interactive-changed 事件与本地兜底共用） */
+  function setInteractive(on) {
+    on = !!on;
+    if (!on) saveLaneScrolls();
+    interactive = on;
+    document.body.classList.toggle('interactive', on);
+    document.getElementById('lanes').hidden = !on;
+    document.getElementById('exit-interactive').hidden = !on;
+    if (on) { buildLanes(); }
+    else { fitLayout(); }        // 回穿透：布局引擎重新接管（窗口尺寸未变，通常零请求）
+    refreshOverflowNote();
+  }
+
+  /* 请求切换：Tauri 内走 Rust 命令（同步穿透/托盘勾选，再经事件回执
+   * 落到 setInteractive）；浏览器/旧二进制时本地直接应用。 */
+  function requestInteractive(on) {
+    if (isTauri()) {
+      T.core.invoke('set_interactive', { on: !!on })
+        .catch(function () { setInteractive(on); });
+    } else {
+      setInteractive(on);
+    }
   }
 
   /* 页脚：刷新口径 + 数据新鲜度（清单 #12）。
@@ -428,9 +504,11 @@
   function refreshOverflowNote() {
     var note = document.querySelector('.p-foot .p-note');
     if (note) {
-      note.textContent = '事件驱动刷新 · 每周一 10:00(北京时间)全量更新 · 开机自动刷新' +
-        freshnessSuffix() +
-        (document.getElementById('groups').dataset.overflow ? '（本周事件较多，超出部分未显示）' : '');
+      note.textContent = interactive
+        ? '交互模式 · 滚轮翻阅各日泳道 · Esc 退出' + freshnessSuffix()
+        : '事件驱动刷新 · 每周一 10:00(北京时间)全量更新 · 开机自动刷新' +
+          freshnessSuffix() +
+          (document.getElementById('groups').dataset.overflow ? '（本周事件较多，超出部分未显示）' : '');
       note.classList.toggle('stale', !!metaLastError);
     }
   }
@@ -485,6 +563,7 @@
   }
 
   function fitLayout() {
+    if (interactive) return;    // 交互时分列容器隐藏，探针会量错——泳道不走布局引擎
     var groups = document.getElementById('groups');
     if (!groups) return;
     var root = document.documentElement;
@@ -569,6 +648,13 @@
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(fitLayout, 120);
     });
+    document.addEventListener('keydown', function (e) {
+      if (interactive && (e.key === 'Escape' || e.key === 'Esc')) requestInteractive(false);
+    });
+    var exitBtn = document.getElementById('exit-interactive');
+    if (exitBtn) exitBtn.addEventListener('click', function () { requestInteractive(false); });
+    /* 无头测试/截图脚本入口（同 window.__FLAG_DIR__ 先例） */
+    window.__setInteractive = setInteractive;
     if (isTauri()) {
       loadFromTauri();
     } else {

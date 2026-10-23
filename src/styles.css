@@ -360,3 +360,63 @@ button.btn.primary:hover { background: #1864ab; }
 /* 美元口径着色（usd_mode）：利多红 / 利空绿，染实际值 */
 .ev .vals b.bull { color: var(--bull); }
 .ev .vals b.bear { color: var(--bear); }
+
+/* ---------------- 交互模式 · 按天泳道（2026-10-23 用户拍板，混合式） ----------------
+ * 默认穿透模式下 #lanes 不显示、#groups 照常分列；body.interactive 时
+ * 两者对调：泳道按天分道、每道独立竖滚，窗口经 set_interactive 命令
+ * 关闭鼠标穿透后滚轮才进得来。以下全部是增量样式，不改穿透模式任何
+ * 既有规则。 */
+#lanes { display: none; }
+body.interactive #groups { display: none; }
+body.interactive #lanes {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.lane {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--row-border);
+  padding-left: 0.55em;
+  margin-left: 0.55em;
+}
+.lane:first-child { border-left: none; padding-left: 0; margin-left: 0; }
+.lane-head {
+  font-size: .95em;
+  font-weight: 700;
+  color: var(--text);
+  padding: 0.35em 0.2em 0.25em;
+  letter-spacing: .04em;
+  border-bottom: 1px solid var(--row-border);
+  margin-bottom: 0.15em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lane-count { color: var(--muted); font-weight: 400; font-size: .85em; margin-left: .5em; }
+.lane-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, .25) transparent;
+  padding-right: 0.15em;
+}
+.lane-body::-webkit-scrollbar { width: 5px; }
+.lane-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .22); border-radius: 3px; }
+.lane-body::-webkit-scrollbar-track { background: transparent; }
+#exit-interactive {
+  font: inherit;
+  font-size: .8em;
+  color: var(--muted);
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.18em 0.75em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#exit-interactive:hover { color: var(--text); background: rgba(255, 255, 255, .12); }
