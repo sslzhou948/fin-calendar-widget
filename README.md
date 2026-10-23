@@ -85,6 +85,6 @@ npx tauri build    # 打安装包（Windows: msi/nsis；macOS: dmg）
 
 云构建：`.github/workflows/build.yml`（需手动上传，见文件头注释）。push tag `v*` 后在 Windows / macOS 云主机自动构建并发布 draft Release。
 
-详细需求见 [`PRD.md`](./PRD.md)，技术方案见 [`docs/TECH-DESIGN.md`](./docs/TECH-DESIGN.md)。
+需求与技术方案为内部文档，未随仓库公开。
 
 </details>

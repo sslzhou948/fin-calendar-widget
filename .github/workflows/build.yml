@@ -61,6 +61,10 @@ jobs:
   build:
     name: Build (${{ matrix.os }})
     needs: [test]
+    # tauri-action 需要写权限才能在 tag 构建时创建 Release 并上传资产；
+    # 仓库默认 GITHUB_TOKEN 为只读时该步会被静默跳过（v0.2.0 实证无草稿）。
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:

@@ -14,3 +14,12 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# 内部工作文档（不随仓库公开，本地留档）
+PRD.md
+docs/TECH-DESIGN.md
+docs/TEST-REPORT.md
+docs/TEST-SETTINGS.md
+docs/data-audit/
+docs/prototype/
+docs/test-evidence/
