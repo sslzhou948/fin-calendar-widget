@@ -21,11 +21,13 @@
     font_size: 14,
     frosted: true,
     notifications: true,
+    autostart: true,
     source: 'auto',
     usd_mode: false,
     notify_events: false,
     hide_holidays: false,
-    panel_width_pct: 42,
+    width_mode: 'auto',
+    manual_columns: 3,
     frost_opacity: 70,
     colors: {
       time: '#f0a832', stars: '#ffd166',
@@ -79,6 +81,7 @@
       document.querySelectorAll('input[name="country"]:checked')
     ).map(function (i) { return i.value; });
     var sideEl = document.querySelector('input[name="side"]:checked');
+    var wmEl = document.querySelector('input[name="widthMode"]:checked');
     var colors = {};
     COLOR_FIELDS.forEach(function (pair) {
       colors[pair[1]] = el(pair[0]).value;
@@ -88,10 +91,12 @@
       min_stars: parseInt(el('minStars').value, 10),
       side: sideEl ? sideEl.value : 'right',
       font_size: parseInt(el('fontSize').value, 10),
-      panel_width_pct: parseInt(el('panelWidth').value, 10),
+      width_mode: wmEl ? wmEl.value : 'auto',
+      manual_columns: parseInt(el('manualColumns').value, 10),
       frost_opacity: parseInt(el('frostOpacity').value, 10),
       frosted: el('frosted').checked,
       notifications: el('notify').checked,
+      autostart: el('autostart').checked,
       usd_mode: el('usdMode').checked,
       notify_events: el('notifyEvents').checked,
       hide_holidays: el('hideHolidays').checked,
@@ -112,19 +117,22 @@
     if (sideEl) sideEl.checked = true;
     el('fontSize').value = String(c.font_size);
     el('fontSizeVal').textContent = c.font_size + ' px';
-    el('panelWidth').value = String(c.panel_width_pct);
-    el('panelWidthVal').textContent = c.panel_width_pct + '%';
+    var wmEl = document.querySelector('input[name="widthMode"][value="' + c.width_mode + '"]');
+    if (wmEl) wmEl.checked = true;
+    el('manualColumns').value = String(c.manual_columns);
     el('frostOpacity').value = String(c.frost_opacity);
     el('frostOpacityVal').textContent = c.frost_opacity + '%';
     el('frosted').checked = !!c.frosted;
     el('notify').checked = !!c.notifications;
+    el('autostart').checked = c.autostart !== false;
     el('usdMode').checked = !!c.usd_mode;
     el('notifyEvents').checked = !!c.notify_events;
     el('hideHolidays').checked = !!c.hide_holidays;
     COLOR_FIELDS.forEach(function (pair) {
       el(pair[0]).value = c.colors[pair[1]];
     });
-    el('source').value = c.source;
+    /* 旧配置的 source="backup"（Investing 已删）一律显示为自动 */
+    el('source').value = (c.source === 'primary') ? 'primary' : 'auto';
   }
 
   /* ---------- 配置读写 ---------- */
@@ -157,18 +165,12 @@
     var html = results.map(function (r) {
       var cls = r.ok ? 'ok' : 'fail';
       var status = r.ok ? '✓ 连通' : '✗ 失败';
-      /* 备源 Investing 已知被 Cloudflare 拦截（2026-10-19 确认），失败属预期，标注清楚免误会 */
-      var note = '';
-      if (!r.ok && /investing/i.test(r.name)) {
-        note = '<div class="note">备源：已知被 Cloudflare 按机器人拦截（HTTP 403），属预期失败，不影响主源使用。</div>';
-      }
       return '<div class="t-card">' +
         '<div><strong>' + escapeHtml(r.name) + '</strong>　' +
         '<span class="' + cls + '">' + status + '</span></div>' +
         '<div>延迟：' + escapeHtml(String(r.latency_ms == null ? '—' : r.latency_ms + ' ms')) +
         '　解析行数：' + escapeHtml(String(r.rows == null ? '—' : r.rows)) + '</div>' +
         (r.error ? '<div class="fail">错误：' + escapeHtml(r.error) + '</div>' : '') +
-        note +
         '</div>';
     }).join('');
     box.innerHTML = html;
@@ -177,11 +179,11 @@
   function renderSimulatedTest() {
     el('testResult').innerHTML =
       '<div class="t-card">' +
-      '<div><strong>主数据源（Investing 小工具）</strong>　<span class="ok">✓ 连通（模拟）</span></div>' +
+      '<div><strong>主数据源（金十 WebSocket）</strong>　<span class="ok">✓ 连通（模拟）</span></div>' +
       '<div>延迟：218 ms　解析行数：42</div>' +
       '</div>' +
       '<div class="t-card">' +
-      '<div><strong>备用数据源（JSON 接口）</strong>　<span class="ok">✓ 连通（模拟）</span></div>' +
+      '<div><strong>备用数据源（Faireconomy JSON）</strong>　<span class="ok">✓ 连通（模拟）</span></div>' +
       '<div>延迟：305 ms　解析行数：38</div>' +
       '</div>' +
       '<div class="note">浏览器预览模式：以上为模拟说明文字，非真实测试结果。' +
@@ -273,14 +275,22 @@
 
   function init() {
     buildCountryChecks();
-    loadConfig().then(function (cfg) { fillForm(cfg || DEFAULT_CONFIG); });
+    var snapshot = null;   /* 打开设置时的配置快照（清单 #7 取消回滚用） */
+    var closingIntentional = false;   /* 取消按钮主动关窗标记，防二次回滚 */
+    /* 竞态护栏（QA G2 Major）：配置加载完成前锁定表单——否则用户抢先
+       编辑/点应用，readForm 读到的是 HTML 静态默认，会把默认配置
+       覆盖落盘、或在回调返回时被 fillForm 冲掉正在改的内容。 */
+    var wrapEl = document.querySelector('.s-wrap');
+    if (wrapEl) { wrapEl.style.pointerEvents = 'none'; wrapEl.style.opacity = '0.55'; }
+    loadConfig().then(function (cfg) {
+      var shown = cfg || DEFAULT_CONFIG;
+      fillForm(shown);
+      snapshot = JSON.parse(JSON.stringify(Object.assign({}, DEFAULT_CONFIG, shown)));
+      if (wrapEl) { wrapEl.style.pointerEvents = ''; wrapEl.style.opacity = ''; }
+    });
 
     el('fontSize').addEventListener('input', function () {
       el('fontSizeVal').textContent = el('fontSize').value + ' px';
-    });
-
-    el('panelWidth').addEventListener('input', function () {
-      el('panelWidthVal').textContent = el('panelWidth').value + '%';
     });
 
     el('frostOpacity').addEventListener('input', function () {
@@ -296,34 +306,74 @@
     el('testBtn').addEventListener('click', runTest);
     el('testActualsBtn').addEventListener('click', runActualsTest);
 
-    /* 样式类控件：防抖自动保存，主窗口经 calendar-updated 即时重渲染 */
-    var liveTimer = null;
-    function liveSave() {
-      if (liveTimer) clearTimeout(liveTimer);
-      liveTimer = setTimeout(async function () {
-        try { await saveConfig(readForm()); } catch (e) { /* 下次再试 */ }
-      }, 350);
+    /* ---------- 预览 / 应用 / 取消（清单 #7） ----------
+     * 任何表单改动防抖后走 preview_config：仅内存生效、主窗口即时
+     * 重渲染、不落盘；「应用」才 set_config 落盘并更新快照；
+     * 「取消」/关窗（X）以快照回滚预览后关闭。
+     * 浏览器模式无后端：预览无外部效果，「应用」写 localStorage，
+     * 「取消」恢复表单即可。（旧 liveSave 自动落盘逻辑已删除。） */
+    var previewTimer = null;
+    function schedulePreview() {
+      if (previewTimer) clearTimeout(previewTimer);
+      previewTimer = setTimeout(async function () {
+        if (!isTauri()) return;
+        try {
+          await T.core.invoke('preview_config', { config: readForm() });
+        } catch (e) { /* 预览失败不打扰，下次改动再试 */ }
+      }, 250);
     }
-    ['fontSize', 'panelWidth', 'frostOpacity', 'frosted'].forEach(function (id) {
-      var node = el(id);
-      if (node) node.addEventListener('input', liveSave);
-    });
-    /* 颜色取色器同样实时生效 */
-    document.querySelectorAll('input[type="color"][data-color-key]').forEach(function (node) {
-      node.addEventListener('input', liveSave);
-    });
+    if (wrapEl) {
+      wrapEl.addEventListener('input', schedulePreview);
+      wrapEl.addEventListener('change', schedulePreview);
+    }
 
-    el('saveBtn').addEventListener('click', async function () {
+    async function restoreSnapshot() {
+      if (!snapshot) return;
+      fillForm(snapshot);
+      if (isTauri()) {
+        try { await T.core.invoke('preview_config', { config: snapshot }); } catch (e) { /* 忽略 */ }
+      }
+    }
+
+    async function closeSettings() {
+      if (isTauri() && T.window && T.window.getCurrentWindow) {
+        try { await T.window.getCurrentWindow().close(); return; } catch (e) { /* 落到 window.close */ }
+      }
+      window.close();
+    }
+
+    el('applyBtn').addEventListener('click', async function () {
       var cfg = readForm();
       try {
         await saveConfig(cfg);
+        snapshot = cfg;
         var tip = el('saveTip');
         tip.hidden = false;
         setTimeout(function () { tip.hidden = true; }, 2000);
       } catch (e) {
-        alert('保存失败：' + String(e && e.message || e));
+        alert('应用失败：' + String(e && e.message || e));
       }
     });
+
+    el('cancelBtn').addEventListener('click', async function () {
+      closingIntentional = true;   /* 已在此回滚，关窗拦截器不要重复 */
+      await restoreSnapshot();
+      closeSettings();
+    });
+
+    /* 关窗（X）= 取消：拦截关闭，先回滚未应用的预览，再销毁窗口 */
+    if (isTauri() && T.window && T.window.getCurrentWindow) {
+      try {
+        var cw = T.window.getCurrentWindow();
+        cw.onCloseRequested(async function (event) {
+          event.preventDefault();
+          if (!closingIntentional) {
+            await restoreSnapshot();
+          }
+          try { await cw.destroy(); } catch (e) { /* 已关闭 */ }
+        }).catch(function () { /* 注册失败忽略，不阻断设置页 */ });
+      } catch (e) { /* 忽略 */ }
+    }
   }
 
   if (document.readyState === 'loading') {
