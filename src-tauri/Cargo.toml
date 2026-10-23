@@ -1,6 +1,6 @@
 [package]
 name = "fin-calendar-widget"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.77"
 description = "桌面财经日历挂件 — 透明叠加层 + 事件驱动刷新 + 系统通知（Tauri v2 应用壳）"
