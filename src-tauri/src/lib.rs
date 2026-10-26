@@ -11,6 +11,7 @@
 //!   build_wake_list, week_monday, weekday_cn}`
 //! - `caldata::model::{CalendarEvent, Country::code(), Source}`
 
+mod desktop_pin;
 mod notifier;
 mod scheduler;
 mod state;
@@ -57,9 +58,7 @@ pub fn run() {
             // 回滚必须走 Rust——旧做法在 JS 里拦截 CloseRequested、等
             // IPC 后再 destroy，WebView2 上会把窗口拆成黑框僵尸
             //（2026-10-23 真机实证：点 X 关不掉、取消后窗口内容变黑）。
-            if window.label() == "settings"
-                && matches!(event, tauri::WindowEvent::Destroyed)
-            {
+            if window.label() == "settings" && matches!(event, tauri::WindowEvent::Destroyed) {
                 let app = window.app_handle();
                 let state = app.state::<AppState>();
                 if state.rollback_preview() {
@@ -85,6 +84,10 @@ pub fn run() {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();
                 let _ = w.set_focus();
+            } else {
+                // #17：Explorer 重启会连带销毁挂靠的子窗口（Win32 语义），
+                // 此时托盘仍在、主窗已无；二次启动不再是空操作，改为重建主窗。
+                recreate_main_window(app);
             }
         }))
         .setup(|app| {
@@ -100,12 +103,22 @@ pub fn run() {
 
             position_main_window(app.handle());
 
-            // 主窗口获得焦点时重新压到底（防浮到应用窗口之上）
+            // #17：主窗口获得焦点时，被动态确保挂靠（脱钩/挂靠失败时自愈）；
+            // 交互态沿用旧压底（此时为顶层窗口）。
             if let Some(win) = app.get_webview_window("main") {
                 let win_clone = win.clone();
+                let app_handle = app.handle().clone();
                 win.on_window_event(move |ev| {
                     if matches!(ev, tauri::WindowEvent::Focused(true)) {
-                        pin_to_bottom(&win_clone);
+                        let interactive = app_handle
+                            .try_state::<InteractiveState>()
+                            .map(|s| s.on.load(Ordering::SeqCst))
+                            .unwrap_or(false);
+                        if interactive {
+                            pin_to_bottom(&win_clone);
+                        } else if !desktop_pin::ensure_attached(&win_clone) {
+                            pin_to_bottom(&win_clone);
+                        }
                     }
                 });
             }
@@ -149,7 +162,8 @@ pub fn run() {
 /// 缩放）。**全程浮点、总量向上取整**：逐分量取整会在默认字号下产生
 /// 负误差、静默吞掉最后一列（QA B1），禁止改回整数分量公式。
 fn width_for_columns(em_px: f64, col_w: u32, cols: u32) -> u32 {
-    let total = 2.2 * em_px + 2.0
+    let total = 2.2 * em_px
+        + 2.0
         + cols as f64 * col_w as f64
         + cols.saturating_sub(1) as f64 * 1.6 * em_px;
     total.ceil() as u32
@@ -201,7 +215,6 @@ fn place_window(app: &AppHandle, width: u32) {
         wx + ww as i32 - w as i32
     };
     let _ = win.set_size(tauri::PhysicalSize::new(w, wh));
-    let _ = win.set_position(tauri::PhysicalPosition::new(x, wy));
     // 点击穿透：默认全穿透（挂件不可交互，操作走托盘 / 设置页）；
     // 交互模式中则保持可交互——重贴边（刷新改宽 / 配置变更）不得
     // 把穿透偷偷开回，否则前端泳道还在、鼠标已死（状态脱节）。
@@ -209,11 +222,33 @@ fn place_window(app: &AppHandle, width: u32) {
         .try_state::<InteractiveState>()
         .map(|s| s.on.load(Ordering::SeqCst))
         .unwrap_or(false);
+    // #17：被动穿透态挂桌面 WorkerW（壁纸之上、图标之下）；交互态必须先脱钩
+    // 回顶层窗口——图标层（DefView 全屏覆盖）位于挂靠层之上，永久挂靠会截获
+    // 全部鼠标输入、泳道滚轮与悬停无法工作。交互退出时由 apply_interactive
+    // 经重贴边自动回挂。
+    let attached = if interactive {
+        desktop_pin::detach_to_top(&win);
+        let _ = win.set_position(tauri::PhysicalPosition::new(x, wy));
+        false
+    } else {
+        match desktop_pin::attach_to_desktop(&win, x, wy) {
+            Some((px, py)) => {
+                let _ = win.set_position(tauri::PhysicalPosition::new(px, py));
+                true
+            }
+            None => {
+                let _ = win.set_position(tauri::PhysicalPosition::new(x, wy));
+                false
+            }
+        }
+    };
     if let Err(e) = win.set_ignore_cursor_events(!interactive) {
         eprintln!("[window] 点击穿透设置失败: {e}");
     }
-    // Windows：钉在 Z 序最底层（壁纸层），防止浮到应用窗口之上
-    pin_to_bottom(&win);
+    // 挂靠成功后无需压底；挂靠失败或交互态沿用旧的 HWND_BOTTOM 兜底
+    if !attached {
+        pin_to_bottom(&win);
+    }
 }
 
 /// 初始定位：手动模式用 manual_columns，自适应先给 3 列，
@@ -272,12 +307,20 @@ fn apply_interactive(app: &AppHandle, on: bool) {
         }
     }
     if let Some(win) = app.get_webview_window("main") {
+        if on {
+            // #17：先脱钩回顶层窗口再给焦点——挂靠态下图标层截获鼠标，
+            // 不脱钩则泳道滚轮与悬停无法工作。
+            desktop_pin::detach_to_top(&win);
+        }
         if let Err(e) = win.set_ignore_cursor_events(!on) {
             eprintln!("[window] 交互模式穿透切换失败: {e}");
         }
         if on {
             let _ = win.show();
             let _ = win.set_focus();
+        } else {
+            // #17：退出交互经重贴边回挂桌面层（保持当前宽度）。
+            reposition_preserving_width(app);
         }
     }
     if let Err(e) = app.emit_to("main", "interactive-changed", on) {
@@ -325,7 +368,7 @@ fn pin_to_bottom(win: &tauri::WebviewWindow) {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{
-        HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
+        SetWindowPos, HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
     };
     // 经 raw-window-handle 取 isize（版本无关），再构本 crate 的 HWND，
     // 避开 Tauri 自带 windows crate 与本 crate 的 HWND 类型不一致问题。
@@ -415,6 +458,27 @@ fn build_tray(app: &AppHandle) {
         .expect("托盘图标创建失败");
 }
 
+/// 重建主窗口（#17 Explorer 重启恢复路径）：配置与 tauri.conf.json 主窗一致
+/// （透明、无边框、任务栏隐藏），建完走正常贴边+挂靠流程。
+/// 前端启动后自行 get_state 拉取，不需额外广播。
+fn recreate_main_window(app: &AppHandle) {
+    if app.get_webview_window("main").is_some() {
+        return;
+    }
+    match WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+        .title("FinCalendar")
+        .inner_size(800.0, 1000.0)
+        .decorations(false)
+        .transparent(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .build()
+    {
+        Ok(_) => position_main_window(app),
+        Err(e) => eprintln!("[window] 主窗口重建失败: {e}"),
+    }
+}
+
 /// 设置窗口：独立 WebviewWindow，非穿透、可交互（TECH-DESIGN §8）
 fn open_settings(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("settings") {
@@ -435,14 +499,15 @@ fn open_settings(app: &AppHandle) {
             }
         }
     }
-    if let Err(e) = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
-        .title("设置 — 财经日历挂件")
-        .inner_size(600.0, 680.0)
-        .min_inner_size(520.0, 560.0)
-        .decorations(true)
-        .resizable(true)
-        .skip_taskbar(false)
-        .build()
+    if let Err(e) =
+        WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
+            .title("设置 — 财经日历挂件")
+            .inner_size(600.0, 680.0)
+            .min_inner_size(520.0, 560.0)
+            .decorations(true)
+            .resizable(true)
+            .skip_taskbar(false)
+            .build()
     {
         eprintln!("[window] 设置窗口创建失败: {e}");
     }
@@ -533,11 +598,9 @@ async fn test_sources() -> Result<Vec<SourceTestResult>, String> {
         let t0 = std::time::Instant::now();
         match Jin10::new() {
             Ok(src) => {
-                let res = tokio::time::timeout(
-                    Duration::from_secs(30),
-                    src.probe(now_sh().date_naive()),
-                )
-                .await;
+                let res =
+                    tokio::time::timeout(Duration::from_secs(30), src.probe(now_sh().date_naive()))
+                        .await;
                 let latency_ms = t0.elapsed().as_millis();
                 match res {
                     Ok(Ok(rows)) => out.push(SourceTestResult {
@@ -581,8 +644,7 @@ async fn test_sources() -> Result<Vec<SourceTestResult>, String> {
                 let name = format!("{}（整周 · 1 次请求）", src.name());
                 let t0 = std::time::Instant::now();
                 let res =
-                    tokio::time::timeout(Duration::from_secs(30), src.fetch_week(week_start))
-                        .await;
+                    tokio::time::timeout(Duration::from_secs(30), src.fetch_week(week_start)).await;
                 let latency_ms = t0.elapsed().as_millis();
                 match res {
                     Ok(Ok(events)) => out.push(SourceTestResult {
