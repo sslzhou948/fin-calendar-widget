@@ -84,8 +84,12 @@ mod imp {
         SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER,
     };
 
+    /// windows 0.58 的 HWND 包的是 *mut c_void（非整数），空句柄用此常量。
+    const NULL_HWND: HWND = HWND(std::ptr::null_mut());
+
     /// 已发现的桌面 WorkerW 缓存（Explorer 重启后失效，`IsWindow` 校验）。
-    static CACHED_WORKERW: Mutex<Option<HWND>> = Mutex::new(None);
+    /// 存整数地址而非 HWND：裸指针不是 Send，不能进 static Mutex。
+    static CACHED_WORKERW: Mutex<Option<isize>> = Mutex::new(None);
 
     fn hwnd_of(win: &WebviewWindow) -> Option<HWND> {
         let handle = win.window_handle().ok()?;
@@ -124,13 +128,21 @@ mod imp {
             let defview = wide("SHELLDLL_DefView");
             let workerw = wide("WorkerW");
             let null_str = PCWSTR::from_raw(std::ptr::null());
-            let found = FindWindowExW(hwnd, HWND(0), PCWSTR::from_raw(defview.as_ptr()), null_str);
+            let found = FindWindowExW(
+                hwnd,
+                NULL_HWND,
+                PCWSTR::from_raw(defview.as_ptr()),
+                null_str,
+            );
             if let Ok(dv) = found {
-                if dv != HWND(0) {
-                    if let Ok(next) =
-                        FindWindowExW(HWND(0), hwnd, PCWSTR::from_raw(workerw.as_ptr()), null_str)
-                    {
-                        if next != HWND(0) {
+                if dv != NULL_HWND {
+                    if let Ok(next) = FindWindowExW(
+                        NULL_HWND,
+                        hwnd,
+                        PCWSTR::from_raw(workerw.as_ptr()),
+                        null_str,
+                    ) {
+                        if next != NULL_HWND {
                             ctx.target = Some(next);
                             return BOOL(0);
                         }
@@ -149,7 +161,7 @@ mod imp {
                 PCWSTR::from_raw(progman_cls.as_ptr()),
                 PCWSTR::from_raw(std::ptr::null()),
             ) {
-                if progman != HWND(0) {
+                if progman != NULL_HWND {
                     // Explorer 忙时 1s 超时即放弃等待，仍继续枚举
                     // （WorkerW 可能已由上次生成）。
                     let mut _result: usize = 0;
@@ -173,14 +185,15 @@ mod imp {
     /// 取缓存的 WorkerW（校验存活，失效则重新发现；0x052C 只在此处触发）。
     fn cached_workerw() -> Option<HWND> {
         let mut guard = CACHED_WORKERW.lock().ok()?;
-        if let Some(h) = *guard {
+        if let Some(addr) = *guard {
+            let h = HWND(addr as *mut std::ffi::c_void);
             if unsafe { IsWindow(h) }.0 != 0 {
                 return Some(h);
             }
             *guard = None;
         }
         let found = discover_workerw()?;
-        *guard = Some(found);
+        *guard = Some(found.0 as isize);
         Some(found)
     }
 
@@ -205,7 +218,7 @@ mod imp {
             // 否则首次挂靠可能仍按顶层窗口绘制。
             let _ = SetWindowPos(
                 hwnd,
-                HWND(0),
+                NULL_HWND,
                 rel_x,
                 rel_y,
                 0,
@@ -222,7 +235,7 @@ mod imp {
         };
         unsafe {
             let parented = match GetParent(hwnd) {
-                Ok(p) => p != HWND(0),
+                Ok(p) => p != NULL_HWND,
                 Err(_) => false,
             };
             if !parented {
@@ -232,12 +245,12 @@ mod imp {
             if GetWindowRect(hwnd, &mut rect).is_err() {
                 return false;
             }
-            if SetParent(hwnd, HWND(0)).is_err() {
+            if SetParent(hwnd, NULL_HWND).is_err() {
                 return false;
             }
             let _ = SetWindowPos(
                 hwnd,
-                HWND(0),
+                NULL_HWND,
                 rect.left,
                 rect.top,
                 0,
@@ -253,7 +266,8 @@ mod imp {
             return false;
         };
         let cached = CACHED_WORKERW.lock().ok().and_then(|g| *g);
-        if let Some(w) = cached {
+        if let Some(addr) = cached {
+            let w = HWND(addr as *mut std::ffi::c_void);
             let alive = unsafe { IsWindow(w) }.0 != 0;
             if alive {
                 let parented = unsafe { GetParent(hwnd) }
