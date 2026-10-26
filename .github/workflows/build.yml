@@ -126,3 +126,17 @@ jobs:
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/dmg/*.dmg
+
+      # #17 教训（2026-10-26）：含多个安装器的合包 zip 是 Chrome 危险下载
+      # 拦截的重灾区（v0.2.0 与诊断版两次复发）。另传一个只含 NSIS exe 的
+      # 单文件 artifact，用户下载时只下它；合包保留（MSI 供企业分发）。
+      # 注意：GitHub artifact 下载恒为 zip，单 exe 只能把警告变软、不能根除
+      # （未签名 + 下载量极少仍可能出“不常见”提示，届时点“保留”即可）。
+      - name: Upload setup exe only
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FinCalendarWidget-setup-exe
+          if-no-files-found: warn
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
