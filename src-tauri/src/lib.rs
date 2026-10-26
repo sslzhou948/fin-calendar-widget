@@ -93,6 +93,8 @@ pub fn run() {
         .setup(|app| {
             let dir = app.path().app_data_dir().expect("无法解析 app_data_dir");
             std::fs::create_dir_all(&dir).ok();
+            // #17 诊断：挂靠步骤日志落盘（设置页「桌面挂靠诊断」展示同一份快照）
+            desktop_pin::init_diag_log(dir.join("desktop_pin_diag.log"));
 
             let (state, wake_rx) = AppState::load(dir)?;
             app.manage(state);
@@ -147,6 +149,7 @@ pub fn run() {
             set_panel_width,
             set_interactive,
             get_interactive,
+            get_pin_diag,
             test_sources,
             test_actuals,
             refresh_now
@@ -342,6 +345,16 @@ fn get_interactive(app: AppHandle) -> bool {
     app.try_state::<InteractiveState>()
         .map(|s| s.on.load(Ordering::SeqCst))
         .unwrap_or(false)
+}
+
+/// 设置页「桌面挂靠诊断」：返回当前父窗口与最近挂靠步骤（#17 诊断用）。
+/// 主窗口不存在时返回错误；非 Windows 返回 supported=false 的快照。
+#[tauri::command]
+fn get_pin_diag(app: AppHandle) -> Result<desktop_pin::PinDiag, String> {
+    let Some(win) = app.get_webview_window("main") else {
+        return Err("主窗口不存在".to_string());
+    };
+    Ok(desktop_pin::diag_snapshot(&win))
 }
 
 /// 前端布局引擎请求窗口宽度（整列宽，入参为 CSS 像素）：内部换算为

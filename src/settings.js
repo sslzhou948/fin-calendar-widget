@@ -304,6 +304,48 @@
     el('testBtn').addEventListener('click', runTest);
     el('testActualsBtn').addEventListener('click', runActualsTest);
 
+    /* ---------- 桌面挂靠诊断（#17） ---------- */
+    async function runPinDiag() {
+      var btn = el('pinDiagBtn');
+      var box = el('pinDiagResult');
+      btn.disabled = true;
+      btn.textContent = '诊断中…';
+      try {
+        if (!isTauri()) {
+          box.innerHTML = '<div class="t-card"><span class="fail">浏览器预览模式不支持，需在 Tauri 应用内运行。</span></div>';
+          return;
+        }
+        var d = await T.core.invoke('get_pin_diag');
+        var parentLine = d.current_parent
+          ? '父窗口 ' + d.current_parent + '（类名：' + (d.current_parent_class || '未知') + '）'
+          : '无父窗口（顶层窗口，未挂靠）';
+        var cacheLine = d.cached_workerw
+          ? '缓存 WorkerW ' + d.cached_workerw + '（' + (d.cached_alive ? '存活' : '已失效') + '）'
+          : '无缓存 WorkerW';
+        var events = (d.events || []).slice(-12).map(function (e) {
+          return escapeHtml('[' + e.time + '] ' + e.kind + '：' + e.detail);
+        }).join('<br>');
+        box.innerHTML = '<div class="t-card">' +
+          '<div><strong>桌面挂靠诊断</strong>　' +
+          (d.supported ? '' : '<span class="fail">✗ 非 Windows，挂靠不适用</span>') + '</div>' +
+          '<div>主窗口：' + escapeHtml(String(d.window || '—')) + '</div>' +
+          '<div>当前状态：' + escapeHtml(parentLine) + '</div>' +
+          '<div>' + escapeHtml(cacheLine) + '</div>' +
+          '<div style="margin-top:8px;font-size:12px;color:var(--muted)">最近步骤（新→旧只显示最后 12 条）：</div>' +
+          '<div style="font-size:12px;margin-top:4px">' + events + '</div>' +
+          '<div class="note">日志文件：' + escapeHtml(String(d.log_path || '—')) + '</div>' +
+          '</div>';
+      } catch (e) {
+        box.innerHTML =
+          '<div class="t-card"><span class="fail">诊断调用失败：' +
+          escapeHtml(String(e && e.message || e)) + '</span></div>';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '桌面挂靠诊断';
+      }
+    }
+    el('pinDiagBtn').addEventListener('click', runPinDiag);
+
     /* ---------- 预览 / 应用 / 取消（清单 #7） ----------
      * 任何表单改动防抖后走 preview_config：仅内存生效、主窗口即时
      * 重渲染、不落盘；「应用」才 set_config 落盘并更新快照；
